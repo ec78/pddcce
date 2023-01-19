@@ -10,8 +10,26 @@ matrix report;
 };
 
 struct mgOut {
+
+// Model description
+string panel_var;
+string time_var;
+string df;
+string df_csa;
+scalar nobs;
+scalar ngroups;
+scalar obs_grp;
+
+matrix cd_stat;
+matrix cd_pval;
+matrix R_sq;
+
 matrix b_mg;
 matrix cov_mg;
+matrix z_stats;
+matrix pval;
+matrix ci;
+
 matrix e_mg;
 matrix xxi;
 matrix b_vec;
