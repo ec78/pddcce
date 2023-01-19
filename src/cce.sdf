@@ -1,0 +1,44 @@
+struct mgControl {
+matrix zero_x;
+matrix zero_id;
+matrix y_lags;
+matrix cr_lags;
+matrix no_xbar;
+matrix x_common;
+matrix x_csa;
+matrix report;
+};
+
+struct mgOut {
+matrix b_mg;
+matrix cov_mg;
+matrix e_mg;
+matrix xxi;
+matrix b_vec;
+matrix se_nw;
+matrix se;
+matrix sig_vec;
+matrix out_mg;
+matrix cov_pcce_NW;
+};
+
+struct cdOut {
+matrix cd_nt;
+matrix pvalue_cd_nt;
+matrix meanrho;
+matrix used;
+};
+
+struct pcceNWOut {
+matrix b_pcce;
+matrix cov_pcce;
+matrix sig2_pcce;
+matrix e_pcce;
+matrix se_pcce;
+matrix tvalue_pcce;
+matrix out_pcce;
+matrix ci_vec;
+matrix sig_i_vec;
+matrix cov_pcce_rbst_nw;
+matrix cov_pcce_hs2;
+};

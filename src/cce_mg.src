@@ -1,0 +1,631 @@
+proc(1) = dcce_mg(data, ...);
+    local idvec, tvec, t_n, starttvec, 
+          endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
+          xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, 
+          groupvar, timevar, zero_xx, zero_idx, ybarlags, xbarlags, PT, datevec;
+    
+    /*
+    ** Get  optional control structure
+    */
+    struct mgControl mgCtl_dflt;
+    mgCtl_dflt = mgControlCreate();
+    
+    struct mgControl ctl;
+    ctl = dynargsGet(1, mgCtl_dflt);
+    
+    // Get variable names
+    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
+    
+    // Check for missing values
+    if ismiss(data) .== miss();
+        errorlogat "'dcce_mg': Missing Data Somewhere! This code does not allow it.";
+        end;
+    endif;
+    
+    // Get prelag utility time and id vectors
+    { idvec, tvec, t_n, starttvec, endtvec, miny, maxy, mint, maxt, datevec } = _getTimeInfo(data, groupvar, timevar);
+    n = rows(idvec);
+    ivec = seqa(1, 1, n);
+    
+    // Cross section averages
+    data_bar = getCSA(data, groupvar, timevar);
+
+    // Get data mats
+    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, ctl.y_lags);
+    data_d = setcolnames(data_d, dname');
+       
+    // Get dynamic lags to include in 
+    // regression (occurs here because noCSA x's are
+    // removed in _getDataMats)
+    { ybarlags, xbarlags, PT } = __getdlags(ybar, xbar, ctl.cr_lags);
+ 
+    // Form h mat for regression
+    { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data), ybarlags, xbarlags, PT);
+    
+    // Adjust timevars for lags
+    local cumtivec, start_i;
+    cumtivec = 0|cumsumc(tvec);
+    start_i = cumtivec + PT + 1;
+    start_i = start_i[1:rows(start_i)-1];
+        
+    starttvec = data[start_i, timevar];
+    miny = minc(starttvec);
+
+    // Mean group estimation
+    if ctl.zero_x==0;
+        zero_xx = 0;
+    else;
+        zero_xx = ctl.zero_x-3;
+    endif;
+
+    if ctl.zero_id == 0;
+        zero_idx = 0;
+    else;
+        zero_idx = indnv(ctl.zero_id, idvec);
+    endif;
+
+    // Use MG estimation but include 
+    // lags of CSA in h mat
+    struct mgOut cceO;
+    cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx, PT, );
+
+    retp(cceO);    
+endp;
+
+/*
+**> mg
+**  Reference:
+**         PESARAN, M.H., (2006), ESTIMATION AND INFERENCE IN LARGE HETEROGENEOUS PANELS
+**         WITH A MULTIFACTOR ERROR STRUCTURE, ECONOMETRICA, VOL74, NO.4, PP.967-1012.
+**
+**  Format:  mg(data, x_common [, no_xbar, zero_x, zero_id, report ])
+**
+**  Input:   data        Data matrix, should contain:
+**                          * Group variable in the first column
+**                          * Time variable in the second column
+**                          * Dependent data in the third column
+**                          * Independent data beginning in the fourth column.  
+**           x_common    Matrix of common independent data. 
+**           no_xbar     Optional, identifier for X vars which are not used for CSA. Default
+**                       is to include all variables. 
+**           zero_x      Optional, column identifer for X vars which contain zeros 
+**                       for normalization. Must be specified if zero_id is specified.
+**           zero_id     Optional, group identifier for groups which contain zeros 
+**                       for normalization. Must be specified if zero_x is specified.
+**
+**  Output:  mgO         Instance of an mgOut structure containing the 
+**                       following members:
+**
+**              mgO.b_vec                        Coefficient estimates. 
+**              mgO.b_mg                         Mean group estimators.
+**			    mgO.cov_mg                       Mean group covariance matrix. 
+**			    mgO.sig_vec                      Nx1 vector of each sigma_i
+**			    mgO.e_mg                         Residuals
+**			    mgO.se_nw                        Newey-West robust SE.
+**			    mgO.se                           Coefficient SE.
+**			    mgO.out_mg                       Complete output table. 
+*/
+proc(1) = mg(data, ...);
+    local idvec, tvec, t_n, starttvec, 
+          endtvec, miny, maxy, mint, maxt, n, ivec, ybar, ybarname,
+          xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, groupvar, 
+          timevar, zero_xx, zero_idx, datevec;
+    
+    /*
+    ** Get  optional control structure
+    */
+    struct mgControl mgCtl_dflt;
+    mgCtl_dflt = mgControlCreate();
+    
+    struct mgControl ctl;
+    ctl = dynargsGet(1, mgCtl_dflt);
+    
+    // Get variable names
+    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
+    
+    // Check for missing values
+    if ismiss(data) .== miss();
+        errorlogat "'mg': Missing Data Somewhere! This code does not allow it.";
+        end;
+    endif;
+    
+    // Get utility time and id vectors
+    { idvec, tvec, t_n, starttvec, endtvec, miny, maxy, mint, maxt, datevec } = _getTimeInfo(data, groupvar, timevar);
+    n = rows(idvec);
+    ivec = seqa(1, 1, n);
+    
+    // Get data mats
+    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, miss(), ctl.no_xbar, ctl.y_lags);
+    { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data));
+    
+    // Mean group estimation
+    if ctl.zero_x==0;
+        zero_xx = 0;
+    else;
+        zero_xx = ctl.zero_x-3;
+    endif;
+
+    if ctl.zero_id == 0;
+        zero_idx = 0;
+    else;
+        zero_idx = indnv(ctl.zero_id, idvec);
+    endif;
+
+    struct mgOut mgO;
+    mgO = _mg(yname', (xnames'$~dname)', y, x~h[.,1:cols(data_d)], n, tvec, zero_xx, zero_idx);
+    
+    retp(mgO);    
+endp;
+
+proc(1) = cce_mg(data, ...);
+    local idvec, tvec, t_n, starttvec, 
+          endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
+          xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, 
+          groupvar, timevar, zero_xx, zero_idx, datevec;
+    
+    /*
+    ** Get  optional control structure
+    */
+    struct mgControl mgCtl_dflt;
+    mgCtl_dflt = mgControlCreate();
+    
+    struct mgControl ctl;
+    ctl = dynargsGet(1, mgCtl_dflt);
+    
+    // Get variable names
+    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
+    
+    // Check for missing values
+    if ismiss(data) .== miss();
+        errorlogat "'cce_ng': Missing Data Somewhere! This code does not allow it.";
+        end;
+    endif;
+    
+    // Get utility time and id vectors
+    { idvec, tvec, t_n, starttvec, endtvec, miny, maxy, mint, maxt, datevec } = _getTimeInfo(data, groupvar, timevar);
+    n = rows(idvec);
+    ivec = seqa(1, 1, n);
+    
+    // Cross section averages
+    data_bar = getCSA(data, groupvar, timevar);
+
+    // Get data mats
+    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, ctl.y_lags);
+    data_d = setcolnames(data_d, dname');
+    
+    { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data));
+    
+    // Mean group estimation
+    if ctl.zero_x==0;
+        zero_xx = 0;
+    else;
+        zero_xx = ctl.zero_x-3;
+    endif;
+
+    if ctl.zero_id == 0;
+        zero_idx = 0;
+    else;
+        zero_idx = indnv(ctl.zero_id, idvec);
+    endif;
+
+    struct mgOut cceO;
+    cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx);
+    
+    if ctl.report;
+        "";
+        "++++++++++++++++ <Pesran's (2006) CCE Mean Group Estimates> ++++++++++++++++++++++++++++++++++++++++++++";
+        
+        "";
+        "   * CCE Mean Group Estimator is defined by eq(53).";
+        "   * se(NP) is the standard error based on non-parametric variance estimator of eq(58) in Pesaran (2006).";
+        "   * t(.) is associated t-ratio.";
+        "";
+    endif;
+    retp(cceO);    
+endp;
+
+proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
+    
+    local namevar, cumtivec, x_mg, k, i, y_i, x_i, b_i, e_i, inverse_x_x, sig_i, sig2_i;
+    local b_vec, sig_vec, out_mg;
+    local b_mg, b_dm, cov_mg, se_mg, tvalue_mg, results_mg;
+    local t_i, PT, e_mg, cov_pcce_rbst_NW, se_nw, se;
+    
+    PT = dynargsGet(1, 0);
+    
+    // Storage matrices
+    namevar = yname $| xname;
+    cumtivec = 0|cumsumc(tivec);
+    x_mg = x;
+    k = cols(x_mg);
+    inverse_x_x = zeros(k, k);
+    se_nw = zeros(n, k);
+    se = zeros(n, k);
+    b_vec = zeros(n, k);
+    sig_vec = zeros(n, 1);
+    e_mg = zeros(rows(y), 1);
+    
+    // Iterate over each group
+    i=1;
+    do while i <= n;
+        
+        // Separate out data
+        y_i = y[cumtivec[i]+1+PT:cumtivec[i+1]];
+        x_i = x_mg[cumtivec[i]+1+PT:cumtivec[i+1],1:cols(x_mg)];
+        t_i = rows(y_i);
+        
+        // Run OLS
+        { b_i, e_i, inverse_x_x, sig_i, sig2_i, se[i, .] } = __olsIndividual(y_i, x_i, t_i, k, (i == zero_id));
+        
+        // Get Newey-West errors for group i
+        cov_pcce_rbst_NW = hacSE(x_i, e_i, 0, 0, 0, 0);
+        se_nw[i, .] = sqrt(diag(cov_pcce_rbst_NW))';
+        
+        b_vec[i, .] = b_i';
+        sig_vec[i] = sig_i;
+        e_mg[cumtivec[i]+1+PT:cumtivec[i+1]] = e_i;
+        
+        /*** t-test for each i ***/
+        i=i+1;
+    endo;
+
+    /*
+    ** Adjustments for normalized variables 
+    */
+    local indx;
+    indx = rowcontains(seqa(1, 1, cols(b_vec)), zero_x);
+    b_mg = sumc(b_vec)./(n - indx);
+    
+    // mg estimator
+    if zero_x != 0;
+        b_vec[zero_id, zero_x] = b_mg[zero_x];
+    endif;
+    
+    // SE
+    local tmp;
+    tmp = reshape(b_mg, rows(b_vec), rows(b_mg));
+    se_mg = (sumc((b_vec - tmp).^2)./((n-indx).*(n-1-indx))).^(1/2);
+    
+    // COV
+    b_dm = (b_vec-b_mg');    /** row vec**/
+    cov_mg = b_dm'b_dm/((n)*(n-1));
+    if zero_x/=0;
+        cov_mg[zero_x,.] = cov_mg[zero_x,.]*((n)*(n-1))/((n-1)*(n-2));
+        cov_mg[.,zero_x] = cov_mg[.,zero_x]*((n)*(n-1))/((n-1)*(n-2));
+    endif;
+    
+    cov_mg = diagrv(cov_mg, se_mg^2);
+    
+    tvalue_mg = b_mg./se_mg;
+    
+    // Create dataframe containing output table
+    results_mg = b_mg~se_mg~tvalue_mg;
+    out_mg = asDF(namevar[2:rows(namevar)], "y")~asDF(results_mg, "coeff", "se(NP)", "t(NP)");
+    
+    
+    struct mgOut mgO;
+    mgO.b_mg = b_mg;
+    mgO.cov_mg = cov_mg;
+    mgO.e_mg = e_mg;
+    mgO.xxi = inverse_x_x;
+    mgO.b_vec = b_vec;
+    mgO.se_nw = se_nw;
+    mgO.se = se;
+    mgO.sig_vec = sig_vec;
+    mgO.out_mg = out_mg;
+    mgO.cov_pcce_NW = cov_pcce_rbst_NW; 
+    retp(mgO);
+endp;
+
+proc(1) = getCSA(data, groupvar, timevar, ...);
+    local x_csa, data_bar;
+    
+    // Get optional arguments
+    // x_csa            Variables outside of independent variables to add to CSA for regression
+    // getlags          The number of lags to include for dynamic regression
+    x_csa = dynargsGet(1, 0);
+    
+    if x_csa;
+        
+        // Check row compatibility
+        if rows(x_csa) != rows(data_bar);
+            errorlogat "'dcce_mg': Number of observations must match number of rows in original\n
+                         data to be included in cross-sectional averages.";
+            end;
+        endif;
+        
+        // Merge with data
+        data = data~x_csa;
+    endif;
+    
+    data_bar = aggregate(miss(data, 0), "mean", timevar);
+    data_bar = order(data_bar, groupvar);
+
+    retp(data_bar);
+endp;
+
+
+/*
+**> pcceNW
+**  Reference:
+**         PESARAN, M.H., (2006), ESTIMATION AND INFERENCE IN LARGE HETEROGENEOUS PANELS
+**         WITH A MULTIFACTOR ERROR STRUCTURE, ECONOMETRICA, VOL74, NO.4, PP.967-1012.
+**
+**  Format:  pcceNW(varname_cce, y, x, h, n, tivec, starttvec, endtvec, years, b_vec_mg);
+**
+**  Input:   varname_cce                   A (1 + k_x + k_h) x 1 vector of string names of y, x, h
+**           y                             NTx1 vector (please see mg for ordering)
+**           x                             NTxk_x matrix of explanatory variables (NO non-individual-specific variables)
+**           h                             NTxk_h non-individual-specific variables (eg. intercept, etc)
+**           n                             Number of cross section units
+**           tivec                         Nx1 vector of number of time serires for each i, i = 1,...,N.
+**                                         If balanced, put a Nx1 vector of T.
+**           starttvec                     Please put a Nx1 vector of one for balanced panel.
+**           endtvec                       Please put a Nx1 vector of T, for balanced panel.
+**           years                         Please put a Nx1 vector of (1,2,...,T)' for balanced panel
+**           sig_cce                       "sig_vec" from mg
+**           cov_mg_cce                    "cov_mg" from mg
+**           b_vec_mg                      "b_vec" from mg
+**
+**  Output:  b_pcce                       Pooled estimator
+**			 cov_pcce                     Covariance matrix using standard FE type method
+**			 sig2_pcce                    Estimate of sig2
+**			 e_pcce                       Residuals
+**			 se_pcce                      Standard errors based on "sig2_pcce"
+**			 tvalue_pcce                  Based on "sig2_pcce"
+**			 out_pcce                     Output1
+**			 ci_vec                       Estimates of heterogeneous coefficients on h
+**			 sig_i_vec                    Nx1 vector of each zigma_i
+**			 cov_pcce_rbst_h              White heteroskedasticity robust estimator
+**			 cov_pcce_rbst_h_arellano     Arellano robust variance estimator
+**			 cov_pcce_rbst_nw             Newey West Variance Estimator
+**			 cov_pcce_hs2                 Pesaran's Non-parametric variance estimator
+**
+**
+*/
+proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, starttvec, endtvec, years, b_vec_mg);
+    
+    local cumtivec, mx_mx, mx_y, i, y_i, x_i, h_i, m_h_i, mx_i;
+    local b_pcce, e_pcce, sig2_pcce, cov_pcce, se_pcce, tvalue_pcce;
+    local omega_h, e_pcce_i, out_pcce, sig_i_vec;
+    local namedep, namevar_pcce, results_pcce, st_results_pcce, nameh;
+    local dof_i, ci_vec, namevar_h;
+    local startyear, endyear, omega_nw, cov_pcce_rbst_nw;
+    local lg, omega_h_i, z_i, gama0, gamas, s, iv_mx_mx;
+    local omega_hs2, cov_pcce_hs2, b_mean;
+    
+    cumtivec=0|cumsumc(tivec);
+    mx_mx=zeros(cols(x),cols(x)); /** sum of (mx_i'mx_i) **/
+    mx_y=zeros(cols(x),1);		   /** sum of (mx_i'y_i)    **/
+    omega_h=zeros(cols(x),cols(x));
+    iv_mx_mx=zeros(cols(x),cols(x));
+    i=1;
+    do while i<=n;
+        y_i = y[cumtivec[i]+1:cumtivec[i+1]];
+        x_i = x[cumtivec[i]+1:cumtivec[i+1],.];
+        h_i = h[cumtivec[i]+1:cumtivec[i+1],.];
+        m_h_i = (eye(tivec[i])-h_i*pinv(h_i'h_i)*h_i');
+        mx_i = m_h_i*x_i;
+        mx_mx = mx_mx + mx_i'mx_i;
+        /* iv_mx_mx=iv_mx_mx+(sig_cce[i]^2)*pinv(mx_i'mx_i);*/
+        mx_y = mx_y + mx_i'y_i;
+        
+        if i==1;
+            startyear = years[starttvec[i]];
+            endyear = years[endtvec[i]];
+        else;
+            startyear = startyear|years[starttvec[i]];
+            endyear = endyear|years[endtvec[i]];
+        endif;
+        
+        i=i+1;
+    endo;
+    
+    /** beta hat PCCE **/
+    b_pcce =pinv(mx_mx)*mx_y;
+
+    /** residuals & coefficients on Hi **/
+    i=1;
+    sig_i_vec=zeros(n,1);
+    ci_vec=zeros(n,cols(h));
+    do while i<=n;
+        y_i=y[cumtivec[i]+1:cumtivec[i+1]];
+        x_i=x[cumtivec[i]+1:cumtivec[i+1],.];
+        h_i=h[cumtivec[i]+1:cumtivec[i+1],.];
+        m_h_i=(eye(tivec[i])-h_i*invpd(h_i'h_i)*h_i');
+        ci_vec[i,.]=(inv(h_i'h_i)*h_i'(y_i-x_i*b_pcce))';/**coeffcients on Hi**/
+        
+        if i==1;
+            e_pcce=m_h_i*y_i - m_h_i*x_i*b_pcce;
+            sig_i_vec[i]=sqrt((m_h_i*y_i - m_h_i*x_i*b_pcce)'(m_h_i*y_i - m_h_i*x_i*b_pcce)/(tivec[i]-cols(h)));
+            
+        else;
+            e_pcce=e_pcce|(m_h_i*y_i - m_h_i*x_i*b_pcce);
+            dof_i = sumc(diag(m_h_i));
+            sig_i_vec[i]=
+                sqrt((m_h_i*y_i - m_h_i*x_i*b_pcce)'(m_h_i*y_i - m_h_i*x_i*b_pcce)/(tivec[i]-cols(h)));
+            
+        endif;
+        i=i+1;
+    endo;
+    sig2_pcce=e_pcce'e_pcce/(sumc(tivec)-n*cols(h)-cols(x_i));
+    cov_pcce=sig2_pcce*(inv(mx_mx));
+    se_pcce=sqrt(diag(cov_pcce));
+    tvalue_pcce=b_pcce./se_pcce;
+    
+    omega_nw=zeros(cols(mx_i),cols(mx_i));
+    omega_hs2=zeros(cols(mx_i),cols(mx_i));/* (6.54) **/
+    b_mean=meanc(b_vec_mg);
+    i=1;
+    do while i<=n;
+        e_pcce_i=e_pcce[cumtivec[i]+1:cumtivec[i+1]];
+        x_i=x[cumtivec[i]+1:cumtivec[i+1],.];
+        h_i=h[cumtivec[i]+1:cumtivec[i+1],.];
+        m_h_i=(eye(tivec[i])-h_i*invpd(h_i'h_i)*h_i');
+        
+        mx_i=m_h_i*x_i;
+        
+        lg=round(4*(Tivec[i]/100)^(2/9));/*lg=2*Tivec[i]^(1/4);*//*minc(N|ceil(2*Sqrt(T)))*/
+        omega_h_i=0;
+        z_i=e_pcce_i.*mx_i;
+        gama0=(z_i'z_i);
+        
+        s=1;
+        do while s<=lg;
+            gamas=(z_i[s+1:tivec[i],.])'(z_i[1:tivec[i]-s,.]);
+            omega_h_i=omega_h_i + (1-s/(lg+1))*(gamas+gamas');
+            s=s+1;
+        endo;
+        /*N-W*/          omega_nw=omega_nw + (gama0+omega_h_i);
+        omega_hs2=omega_hs2
+            + (mx_i'mx_i)*(b_vec_mg[i,.]-b_mean[1:cols(mx_i)]')'
+            (b_vec_mg[i,.]-b_mean[1:cols(mx_i)]')*(mx_i'mx_i);
+        i=i+1;
+    endo;
+    
+    cov_pcce_rbst_NW = pinv(mx_mx)*omega_nw*pinv(mx_mx);
+    cov_pcce_hs2 = pinv(mx_mx/n)*(omega_hs2/(n-1))*pinv(mx_mx/n)/n;
+    
+    format /rd 9,5;
+    
+    namedep=varname_cce[1];
+    namevar_pcce=varname_cce[2:cols(x)+1];
+    namevar_h=varname_cce[cols(x)+2:cols(varname_cce')];
+    results_pcce=b_pcce~sqrt(diag(cov_pcce_hs2))~(b_pcce./sqrt(diag(cov_pcce_hs2)))
+        ~sqrt(diag(cov_pcce_rbst_NW))~(b_pcce./sqrt(diag(cov_pcce_rbst_NW)));
+//    st_results_pcce=ftocv(results_pcce, 7, 7);
+//    nameh=namedep$~"coeff"$~"se(NP)"$~"t(NP)"$~"se(NW)"$~"t(NW)";
+    /*
+    endif;
+    
+    */
+    out_pcce = asDF(namevar_pcce, "y")~asDF(results_pcce, "coeff","se(NP)","t(NP)","se(NW)","t(NW)");
+    
+    struct pcceNWOut pcceO;
+    pcceO.b_pcce = b_pcce;
+    pcceO.cov_pcce = cov_pcce;
+    pcceO.sig2_pcce  = sig2_pcce;
+    pcceO.e_pcce = e_pcce;
+    pcceO.se_pcce = se_pcce;
+    pcceO.tvalue_pcce = tvalue_pcce;
+    pcceO.out_pcce = out_pcce;
+    pcceO.ci_vec = ci_vec;
+    pcceO.sig_i_vec = sig_i_vec;
+    pcceO.cov_pcce_rbst_nw = cov_pcce_rbst_nw;
+    pcceO.cov_pcce_hs2 = cov_pcce_hs2;
+    
+    retp(pcceO);
+    
+endp;
+
+/*************************************************************************/
+/* NOTE: This code is preliminary, please do NOT distribut.             **/
+/* Please report any problems you might have, to: ty228@econ.cam.ac.uk  **/
+/*                                                                      **/
+/* This code computes CD test statistics defined by eq. (7) in          **/
+/* GENERAL DIAGNOSTIC TESTS FOR CROSS SECTION DEPENDENCE IN PANELS,     **/
+/*                                        PESARAN (2004).               **/
+/*                                                                      **/
+/* {cd_nt,pvalue_cd_nt,meanrho,used}=cdtest(e,n,tivec,starttvec,endtvec)**/
+/* [ this code allows unbalanced panel)                                 **/
+/*  where                                                               **/
+/*  cd_nt:  CD test statistic defined by eq. (7) in PESARAN (2004)      **/
+/*  pvalue_cd_nt: p-value of CD test                                    **/
+/*  meanrho: simple average of residual correlation coefficients rho_ij **/
+/*              defined by eq. (3) in Pesaran (2004)                    **/
+/*  used:   (used number of combinations of rho_ij)/(N(N-1)/2)          **/
+/*  WITH ARGUMENTS                                                      **/
+/*      e: (NT x 1 for balanced panel) stucked residual vector          **/
+/*        e=(e_11,e_12,...,e_1T, e_21,e_22,...,e_2T, ... ,e_N1,e_N2,...,e_NT)' **/
+/*      n: number of cross sections                                     **/
+/*      tivec: (N x 1) vector of number of observations of cross        **/
+/*            section unit i, T_i's                                     **/
+/*            for balanced panel, tivec=T*ones(n,1);                    **/
+/*            for unbalanced panel, eg., (20,20,18,17,18)' for N=5      **/
+/*      starttvec:(N x 1) vector of starting year of i's                **/
+/*            for balanced panel, starttvec=ones(n,1);                  **/
+/*            for unbalanced panel, eg., (1971,1971,1973,1972,1971)'    **/
+/*      endttvec:(N x 1) vector of end year of i's                      **/
+/*            for balanced panel, endttvec=T*ones(n,1);                 **/
+/*            for unbalanced panel, eg., (1996,1996,1994,1997,1980)'    **/
+/*                                                                      **/
+/* NOTE: When T_ij<4, rho_ij is not calculable, so need to be discarded **/
+/*      where T_ij is the number of orverlapped years between i and j   **/
+/*      eg. i has 1971-1980 and j has 1967-1975, T_ij=5                 **/
+/*                                                                      **/
+/* Takashi Yamagata, 3rd June 2005                                      **/
+/*                                                                      **/
+/*************************************************************************/
+
+proc(1) = cdtest(e, n, tivec, starttvec, endtvec);
+    
+    local cumtivec, T_rho, i, e_i, startt_i, endt_i, j, e_j, startt_j, endt_j;
+    local t_s, t_e, e_i_t, e_j_t, T_rho_ij, cd_nt, pvalue_cd_nt;
+    local disc,T_ij,used,meanrho,rho,rho_ij;
+    cumtivec=0|cumsumc(tivec);
+    
+    /** NOTE: When T_ij<4, rho_ij is not calculable, so need to be discarded ***/
+    /******** To obtain Pesaran (2004) test  (CD_nt) ******/
+    rho = 0;	/** for CD_nt ***/
+    T_rho=0;
+    disc=0; /** discarded pair for T_ij<4 **/
+    /** for corrected CD_lm ***/
+    i=1;
+    do while i<=n-1;
+        e_i=e[cumtivec[i]+1:cumtivec[i+1]];
+        startt_i=starttvec[i];
+        endt_i=endtvec[i];
+        j=i+1;
+        do while j<=N;
+            
+            e_j=e[cumtivec[j]+1:cumtivec[j+1]];
+            startt_j=starttvec[j];
+            endt_j=endtvec[j];
+            
+            /*** To eliminate T_ij<4 ***/
+            if startt_i<=startt_j and endt_i>=startt_j;
+                T_ij=endt_i - startt_j - (endt_i-endt_j)*(endt_i>endt_j) +1;
+            elseif startt_i>=startt_j and endt_j>=startt_i;
+                T_ij=endt_j - startt_i - (endt_j-endt_i)*(endt_j>endt_i) +1;
+            else;
+                T_ij=0;
+            endif;
+            if T_ij<4;
+                j=j+1;
+                disc=disc+1;
+                goto DISCARD;
+            endif;
+            /***** end of the elimination procedure ****/
+            t_s=maxc(startt_i|startt_j);
+            t_e=minc(endt_i|endt_j);
+            
+            e_i_t = e_i[t_s-startt_i+1:t_e-startt_i+1]
+                -meanc(e_i[t_s-startt_i+1:t_e-startt_i+1]);
+            e_j_t = e_j[t_s-startt_j+1:t_e-startt_j+1]
+                -meanc(e_j[t_s-startt_j+1:t_e-startt_j+1]);
+            
+            rho_ij=(e_i_t'e_j_t)/(sqrt(e_i_t'e_i_t)*sqrt(e_j_t'e_j_t));
+            T_rho_ij = sqrt(rows(e_i_t))*rho_ij;/*rows(e_i_t)~rho_ij;*/
+            
+            rho=rho+rho_ij;
+            T_rho = T_rho + T_rho_ij ;   			/*  for CD_nt */
+            
+            j=j+1;
+            DISCARD:
+            endo;
+        i=i+1;
+    endo;
+    CD_nt = sqrt(1/((n*(n-1)/2)-disc))*T_rho;
+    meanrho=rho/((n*(n-1)/2)-disc);
+    
+    pvalue_CD_nt = 2*cdfnc(abs(CD_nt)); /** two sided!!*/
+    used=((n*(n-1)/2)-disc)/(n*(n-1)/2);
+    
+    struct cdOut cdO;
+    cdO.cd_nt = cd_nt;
+    cdO.pvalue_cd_nt = pvalue_cd_nt;
+    cdO.meanrho = meanrho;
+    cdO.used = used;
+    
+    retp(cdO);
+endp;

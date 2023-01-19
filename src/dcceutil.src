@@ -1,0 +1,283 @@
+proc (1) = mgControlCreate();
+    struct mgControl ctl;
+    
+    ctl.no_xbar = 0;
+    ctl.zero_x = 0;
+    ctl.zero_id = 0;
+    ctl.report = 1;
+    ctl.y_lags = 0;
+    ctl.x_common = 0;
+    ctl.x_csa = 0;
+    ctl.cr_lags = 0;
+    retp(ctl);
+endp;
+proc (6) = __olsIndividual(y_i, x_i, t_i, k, zero_id);
+    local b_i, e_i, inverse_x_x, sig2_i, sig_i, se;
+    
+    // OLS for group i
+    b_i = pinv(x_i'x_i)*x_i'y_i;
+    e_i = y_i-x_i*b_i;
+    inverse_x_x = /*inverse_x_x + */pinv(x_i'x_i); /*** For Hausman test 1 ***/
+    
+    // Sig for group i
+    if zero_id;
+        sig_i = sqrt(e_i'e_i/(t_i-k+1));
+    else;
+        sig_i = sqrt(e_i'e_i/(t_i-k));
+    endif;
+    
+    sig2_i = sig_i^2;
+    se = /*se|*/sqrt(diag(sig2_i*pinv(x_i'x_i)))';
+    
+    retp(b_i, e_i, inverse_x_x, sig_i, sig2_i, se);
+endp;
+
+proc (3) = __getdlags(ybar, xbar, crlags);
+    local PT, ybarlags, xbarlags, vars, lags, varnames;
+    
+    // Find lag length
+    if crlags;
+        PT = crlags;
+    else;
+        PT = __getPT(rows(ybar));
+    endif;
+    lags = seqa(1, 1, PT);
+    
+    // Get ybar lags
+    ybarlags = lagn(ybar, lags);
+    varnames = getcolnames(ybar) $+ "_l_" $+ itos(lags);
+    ybarlags = setcolnames(ybarlags, varnames, lags);
+    
+    // Get xbar storage matrices
+    xbarlags = asDF(zeros(rows(ybar), cols(xbar)*PT));
+    
+    // Number of variables in xbar
+    vars = cols(xbar);
+    
+    // Lag each x var
+    for i(1, vars, 1);
+        local indx;
+        
+        indx = seqa((i-1)*PT+1, 1, PT);
+        
+        xbarlags[., (i-1)*PT+1:i*PT] = lagn(xbar[., i], lags);
+        
+        varnames = getcolnames(xbar[., i]) $+ "_l_" $+ itos(lags);
+        xbarlags = setColNames(xbarlags, varnames, indx);
+        
+    endfor;
+    
+    retp(ybarlags, xbarlags, PT);
+    
+endp;
+
+proc (7) = _getDataMats(data, x_common, data_bar, no_xbar, ylag);
+    local y, x, t, data_d, ybar, xbar_tmp, xbar, xbarname, ybarname, nb_no_xbar;
+    
+    
+    // Get x and y
+    y = data[., 3];
+    x = data[., 4:cols(data)];
+    t = rows(unique(data[., 2]));
+    
+    if not (data_bar == miss());
+        // Get separate means
+        ybar = data_bar[. , 3];
+        ybarname = getcolnames(ybar) $+ "bar";
+        ybar = setcolnames(ybar, ybarname);
+        
+        // Choose xbar
+        nb_no_xbar = cols(no_xbar);
+        xbar_tmp = data_bar[., 4:cols(data_bar)]; // Don't get x bar until we drop xs
+        
+        // Remove excluded x's
+        xbar = __delXBars(xbar_tmp, no_xbar');
+        xbarname = getcolnames(xbar) $+ "bar";
+        xbar = setcolnames(xbar, xbarname);
+    else;
+        ybar = miss();
+        xbar = miss();
+        ybarname = "";
+        xbarname = "";
+    endif;
+    
+    // Get common data
+    data_d = __getDMat(x_common, t);
+    
+    // Add lags of y
+    if ylag;
+        x = lagn(y, 1)~x;
+        x = setcolnames(x, getcolnames(data_bar[. , 3])$+"_l", 1);
+    endif;
+    
+    retp(y, x, data_d, ybar, xbar, ybarname, xbarname);
+endp;
+
+proc(1) = __getDMat(x_common, N);
+    
+    // Choose z
+    if x_common == 0;
+        retp(asDF(ones(N,1)));
+    else;
+        retp(x_common~asDF(ones(N,1)));
+    endif;
+    
+endp;
+
+proc(2) = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, bigT, ...);
+    local h_i, hname, h, ybar_l, xbar_l, PT;
+    
+    { ybar_l, xbar_l, PT } = dynargsGet(1|3, miss(), miss(), 0);
+    
+    // Form h = (z, ybar, xbar) */
+    h_i = data_d;
+    
+    if not (ybar == miss);
+        h_i = h_i~ybar;
+    endif;
+    
+    if not (xbar == miss);
+        h_i = h_i~xbar;
+    endif;
+    
+    if not (ybar_l == miss());
+        h_i = h_i~ybar_l;
+    endif;
+    
+    if not (xbar_l == miss());
+        //if xbar_l != miss();
+        h_i = h_i~xbar_l;
+    endif;
+    
+    hname = getcolnames(h_i)';
+    
+    // Reshape h
+    h = __reshapeH(h_i, starttvec, endtvec, datevec, bigT);
+    
+    retp(h, hname);
+    
+endp;
+
+
+proc (5) = __getnames(data, x_common, x_csa, ylag);
+    
+    local varnames, groupvar, timevar, yname, xnames, dname;
+    if hasmetadata(data);
+        varnames = getcolnames(data);
+        groupvar = varnames[1];
+        timevar = varnames[2];
+        yname = varnames[3];
+        xnames = varnames[4:cols(data)];
+    else;
+        groupvar = "i";
+        timevar = "j";
+        yname = "y";
+        xnames = "x" $+ itos(seqa(1, 1, cols(data)-3));
+    endif;
+    
+    if ylag;
+        xnames = "y_l"$|xnames;
+    endif;
+    
+    if x_csa;
+        if hasmetadata(x_csa);
+            xnames = xnames$~getColnames(x_csa);
+        else;
+            local tmp;
+            tmp = "x_csa" $+ itos(seqa(1, 1, cols(x_csa)));
+        endif;
+    endif;
+    
+    // Get x common names
+    dname = "inpt";
+    if x_common /=0 and hasmetadata(x_common);
+        dname = getColNames(x_common)$~dname;
+    elseif x_common /=0;
+        dname = "d" $+ itos(seqa(1, 1, cols(x_common)))$~dname;
+    endif;
+    
+    retp(yname, xnames, groupvar, timevar, dname);
+    
+endp;
+
+proc (10) = _getTimeInfo(data, groupvar, timevar, ...);
+    local PT, idvec, tvec, t_n, starttvec, endtvec, miny, maxy, mint, maxt, datevec;
+    
+    PT = dynargsGet(1, 0);
+    
+    // Time vector and ID vector
+    idvec = unique(data[., groupvar]);
+    datevec = unique(data[., timevar]);
+    tvec = counts(data[., groupvar],  idvec);
+    
+    // Count length by variable
+    t_n = counts(data[., "year"], unique(data[., "year"]));
+    
+    // Start and end time vec
+    starttvec = aggregate(data[., groupvar timevar], "min", groupvar);
+    starttvec = starttvec[., 2];
+    endtvec = aggregate(data[., groupvar timevar], "max", groupvar);
+    endtvec = endtvec[.,2];
+    
+    // Min and max
+    miny = asDate(posixtostrc(minc(starttvec), "%Y"), "%Y");
+    maxy = asDate(posixtostrc(maxc(endtvec), "%Y"), "%Y");
+    mint = minc(tvec);
+    maxt = maxc(tvec);
+    
+    // Adjustments for PT
+    if PT;
+        local cumtivec, start_i;
+        cumtivec = 0|cumsumc(tvec);
+        start_i = cumtivec + 3 + 1;
+        start_i = start_i[1:rows(start_i)-1];
+        
+        starttvec = data[start_i, timevar];
+        miny = minc(starttvec);
+        
+        tvec = tvec - PT;
+    endif;
+    
+    retp(idvec, tvec, t_n, starttvec, endtvec, miny, maxy, mint, maxt, datevec);
+endp;
+
+proc (1) = __delXBars(xbar, no_xbar);
+    
+    if type(no_xbar) == 6 and no_xbar /= 0;
+        no_xbar = no_xbar - 3;
+    endif;
+    
+    if not no_xbar;
+        retp(xbar);
+    else;
+        retp(delcols(xbar, no_xbar));
+    endif;
+endp;
+
+proc(1) = __reshapeH(h_i, starttvec, endtvec, datevec, bigT);
+    local tivec, indx1, indx2, h, i;
+    
+    // Index vector
+    indx1 = indnv(starttvec, datevec);
+    indx2 = indnv(endtvec, datevec);
+    
+    // Get tivec
+    tivec = 0|cumsumc((indx2-indx1+1));
+    
+    // Allocate storage
+    h = zeros(bigT, cols(h_i));
+    i = 1;
+    
+    do while i <= rows(indx1);
+        h[tivec[i]+1:tivec[i+1], .] = h_i[indx1[i]:indx2[i], .];
+        i = i + 1;
+    endo;
+    
+    retp(h);
+    
+endp;
+
+proc (1) = __getPT(T);
+    retp(int(T^1/3));
+endp;
+

@@ -1,0 +1,183 @@
+/*
+**> pcceNW
+**  Reference:
+**         PESARAN, M.H., (2006), ESTIMATION AND INFERENCE IN LARGE HETEROGENEOUS PANELS
+**         WITH A MULTIFACTOR ERROR STRUCTURE, ECONOMETRICA, VOL74, NO.4, PP.967-1012.
+**
+**  Format:  {tstat, p, cv} = ADF(y, model[, pmax, ic]);
+**
+**  Input:   Y	     -  Nx1 matrix, data,
+**           model   - 	Optional, specifies deterministic components.
+**                      0 = none
+**                      1 = model with constant
+**                      2 = model with constant and trend
+**           pmax    -  Optional, maximum number of lags for Dy; 0 = no lags
+**           ic      -  Optional, information criterion:
+**                      1 = Akaike
+**                      2 = Schwarz
+**                      3 = t-stat significance
+**
+**  Output:  b_pcce                       Pooled estimator
+**			 cov_pcce                     Covariance matrix using standard FE type method
+**			 sig2_pcce                    Estimate of sig2
+**			 e_pcce                       Residuals
+**			 se_pcce                      Standard errors based on "sig2_pcce"
+**			 tvalue_pcce                  Based on "sig2_pcce"
+**			 out_pcce                     Output1
+**			 ci_vec                       Estimates of heterogeneous coefficients on h
+**			 sig_i_vec                    Nx1 vector of each zigma_i
+**			 cov_pcce_rbst_h              White heteroskedasticity robust estimator
+**			 cov_pcce_rbst_h_arellano     Arellano robust variance estimator
+**			 cov_pcce_rbst_nw             Newey West Variance Estimator
+**			 cov_pcce_hs2                 Pesaran's Non-parametric variance estimator
+**
+**
+*/
+
+/**** Pooled CCE ****/
+/* varname_cce: a (1 + k_x + k_h) x 1 vector of string names ofy, x, h
+y: NTx1 vector (please see mg.prc for ordering)
+x: NTxk_x matrix of explanatory variables (NO non-individual-specific variables)
+h: NTxk_h non-individual-specific variables (eg. intercept, etc)
+
+n: Number of cross section units
+tivec: N
+tivec: Nx1 vector of number of time serires for each i, i=1,...,N.
+if balanced, put a Nx1 vector of T.
+starttvec: please put a Nx1 vector of one for balanced panel.
+endtvec: please put a Nx1 vector of T, for balanced panel.
+years   : please put a Nx1 vector of (1,2,...,T)' for balanced panel
+sig_cce: "sig_vec" from mg.prc
+cov_mg_cce: "cov_mg" from mg.prc
+b_vec_mg: "b_vec" from mg.prc
+
+
+* In Pesaran, cov_pcce_rbst_nw and cov_pcce_hs2 are considered and latter is recommended.
+
+*/
+
+proc(11) = pcceNW(varname_cce, y, x, h, n, tivec, starttvec, endtvec, years, b_vec_mg);
+    
+    local cumtivec, mx_mx, mx_y, i, y_i, x_i, h_i, m_h_i, mx_i;
+    local b_pcce, e_pcce,sig2_pcce,cov_pcce,se_pcce,tvalue_pcce;
+    local omega_h, e_pcce_i;
+    local out_pcce,sig_i_vec;
+    local namedep,namevar_pcce,results_pcce,st_results_pcce,nameh;
+    local dof_i, ci_vec, namevar_h, startyear, endyear;
+    local omega_nw, cov_pcce_rbst_nw;
+    local lg,omega_h_i,z_i,gama0,gamas,s,iv_mx_mx;
+    local omega_hs2,cov_pcce_hs2,b_mean;
+    
+    cumtivec = 0|cumsumc(tivec);
+    mx_mx = zeros(cols(x),cols(x)); /** sum of (mx_i'mx_i) **/
+    mx_y = zeros(cols(x),1);		   /** sum of (mx_i'y_i)    **/
+    omega_h = zeros(cols(x),cols(x));
+    iv_mx_mx = zeros(cols(x),cols(x));
+    i = 1;
+    
+    do while i <= n;
+        y_i = y[cumtivec[i]+1:cumtivec[i+1]];
+        x_i = x[cumtivec[i]+1:cumtivec[i+1],.];
+        h_i = h[cumtivec[i]+1:cumtivec[i+1],.];
+        m_h_i = (eye(tivec[i])-h_i*pinv(h_i'h_i)*h_i');
+        mx_i = m_h_i*x_i;
+        mx_mx = mx_mx + mx_i'mx_i;
+        /* iv_mx_mx=iv_mx_mx+(sig_cce[i]^2)*pinv(mx_i'mx_i);*/
+        mx_y = mx_y + mx_i'y_i;
+        
+        if i==1;
+            startyear=years[starttvec[i]];
+            endyear=years[endtvec[i]];
+        else;
+            startyear=startyear|years[starttvec[i]];
+            endyear=endyear|years[endtvec[i]];
+        endif;
+        
+        i=i+1;
+    endo;
+    
+    /** beta hat PCCE **/
+    b_pcce = pinv(mx_mx)*mx_y;
+    
+    
+    
+    /** residuals & coefficients on Hi **/
+    i=1;
+    sig_i_vec=zeros(n,1);
+    ci_vec=zeros(n,cols(h));
+    do while i<=n;
+        y_i=y[cumtivec[i]+1:cumtivec[i+1]];
+        x_i=x[cumtivec[i]+1:cumtivec[i+1],.];
+        h_i=h[cumtivec[i]+1:cumtivec[i+1],.];
+        m_h_i=(eye(tivec[i])-h_i*invpd(h_i'h_i)*h_i');
+        ci_vec[i,.]=(inv(h_i'h_i)*h_i'(y_i-x_i*b_pcce))';/**coeffcients on Hi**/
+        
+        if i==1;
+            e_pcce=m_h_i*y_i - m_h_i*x_i*b_pcce;
+            sig_i_vec[i]=sqrt((m_h_i*y_i - m_h_i*x_i*b_pcce)'(m_h_i*y_i - m_h_i*x_i*b_pcce)/(tivec[i]-cols(h)));
+            
+        else;
+            e_pcce=e_pcce|(m_h_i*y_i - m_h_i*x_i*b_pcce);
+            dof_i = sumc(diag(m_h_i));
+            sig_i_vec[i]=
+                sqrt((m_h_i*y_i - m_h_i*x_i*b_pcce)'(m_h_i*y_i - m_h_i*x_i*b_pcce)/(tivec[i]-cols(h)));
+            
+        endif;
+        i=i+1;
+    endo;
+    sig2_pcce=e_pcce'e_pcce/(sumc(tivec)-n*cols(h)-cols(x_i));
+    cov_pcce=sig2_pcce*(inv(mx_mx));
+    se_pcce=sqrt(diag(cov_pcce));
+    tvalue_pcce=b_pcce./se_pcce;
+    
+    omega_nw=zeros(cols(mx_i),cols(mx_i));
+    omega_hs2=zeros(cols(mx_i),cols(mx_i));/* (6.54) **/
+    b_mean=meanc(b_vec_mg);
+    i=1;
+    do while i<=n;
+        e_pcce_i=e_pcce[cumtivec[i]+1:cumtivec[i+1]];
+        x_i=x[cumtivec[i]+1:cumtivec[i+1],.];
+        h_i=h[cumtivec[i]+1:cumtivec[i+1],.];
+        m_h_i=(eye(tivec[i])-h_i*invpd(h_i'h_i)*h_i');
+        
+        mx_i=m_h_i*x_i;
+        
+        lg=round(4*(Tivec[i]/100)^(2/9));/*lg=2*Tivec[i]^(1/4);*//*minc(N|ceil(2*Sqrt(T)))*/
+        omega_h_i=0;
+        z_i=e_pcce_i.*mx_i;
+        gama0=(z_i'z_i);
+        
+        s=1;
+        do while s<=lg;
+            gamas=(z_i[s+1:tivec[i],.])'(z_i[1:tivec[i]-s,.]);
+            omega_h_i=omega_h_i + (1-s/(lg+1))*(gamas+gamas');
+            s=s+1;
+        endo;
+        /*N-W*/          omega_nw=omega_nw + (gama0+omega_h_i);
+        omega_hs2=omega_hs2
+            + (mx_i'mx_i)*(b_vec_mg[i,.]-b_mean[1:cols(mx_i)]')'
+            (b_vec_mg[i,.]-b_mean[1:cols(mx_i)]')*(mx_i'mx_i);
+        i=i+1;
+    endo;
+    
+    cov_pcce_rbst_NW = pinv(mx_mx)*omega_nw*pinv(mx_mx);
+    cov_pcce_hs2 = pinv(mx_mx/n)*(omega_hs2/(n-1))*pinv(mx_mx/n)/n;
+    
+    format /rd 9,5;
+    
+    namedep=varname_cce[1];
+    namevar_pcce=varname_cce[2:cols(x)+1];
+    namevar_h=varname_cce[cols(x)+2:cols(varname_cce')];
+    results_pcce=b_pcce~sqrt(diag(cov_pcce_hs2))~(b_pcce./sqrt(diag(cov_pcce_hs2)))
+        ~sqrt(diag(cov_pcce_rbst_NW))~(b_pcce./sqrt(diag(cov_pcce_rbst_NW)));
+    st_results_pcce=ftocv(results_pcce,7,7);
+    nameh=namedep~"coeff"~"se(NP)"~"t(NP)"~"se(NW)"~"t(NW)";
+    /*
+    endif;
+    
+    */
+    out_pcce= nameh|(namevar_pcce~st_results_pcce);
+    retp(b_pcce,cov_pcce,sig2_pcce,e_pcce,se_pcce,tvalue_pcce,out_pcce,ci_vec,sig_i_vec,
+        cov_pcce_rbst_nw,cov_pcce_hs2);
+    
+endp;
