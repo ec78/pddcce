@@ -1,4 +1,74 @@
- proc(1) = dcce_mg(data, ...);
+/*
+**> dcce
+**  Reference:
+**         PESARAN, M.H., (2006), ESTIMATION AND INFERENCE IN LARGE HETEROGENEOUS PANELS
+**         WITH A MULTIFACTOR ERROR STRUCTURE, ECONOMETRICA, VOL74, NO.4, PP.967-1012.
+**
+**  Format:  dcceO = dcce(data, mgCtl)
+**
+**  Input:   data        Data matrix, should contain:
+**                          * Group variable in the first column
+**                          * Time variable in the second column
+**                          * Dependent data in the third column
+**                          * Mean group independent variable data beginning in the fourth column.  
+**
+**           mgCtl       Optional argument, instance of mgControl structure containing the following members. 
+**
+**  
+**             mgCtl.x_common                    Matrix of common independent data to be included
+**                                               in mean group estimators.
+**             mgCtl.x_csa                       Matrix of data not included in MG estimators
+**                                               to be include in cross-sectional averages (CSA). 
+**             mgCtl.cr_lags                     Number of CSA lags to included in estimation. If
+**                                               zero number determined by data.
+**                                               Default = 0.
+**             mgCtl.no_xbar                     Optional, identifier for X vars which are not 
+**                                               used for CSA. Default is to include all variables. 
+**             mgCtl.zero_x                      Optional, column identifer for X vars which contain 
+**                                               zeros  for normalization. Must be specified 
+**                                               if zero_id is specified. Default = 0.
+**             mgCtl.zero_id                     Optional, group identifier for groups which contain 
+**                                               zeros for normalization. Must be specified if 
+**                                               zero_x is specified. Default = 0.
+**
+**  Output:  dcceO       Instance of an mgOut structure containing the 
+**                       following members:
+**
+**           Model Description
+**              dcceO.panel_var                     Panel identifier variable.
+**              dcceO.time_var                      Time variable.
+**              dcceO.mg_vars                       Mean group variables.
+**              dcceO.csa_vars                      Cross sectional average variables.
+**              dcceO.y_varname                     Dependent variable.
+**              dcceO.model                         Model type.
+**
+**           Model dimensions 
+**              dcceO.nobs                          Total number of pooled observations.
+**              dcceO.ngroups                       Number of groups. 
+**              dcceO.numvars                       Number of MG variables. 
+**              dcceO.obs_grp                       Number of observations per group.
+**              dcceO.csa_lags                      Number of cross-sectional lags.
+**              dcceO.k_reg                         Total number of vaiables in estimation regression.
+**              dcceO.df                            Degrees of freedom without cross-sectional averages or CSA lags. 
+**              dcceO.df_csa                        Degrees of freedom with cross-sectional averages and CSA lags.
+** 
+**           Model estimates
+**              dcceO.b_vec                        Coefficient estimates by group. 
+**              dcceO.b_mg                         Mean group estimators.
+**              dcceO.e_mg                         Residuals.
+**			    dcceO.cov_mg                       Mean group covariance matrix based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006). 
+**              dcceO.se_mg                        MG estimators standard error based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006).
+**              dcceO.tvalue                       MG estimators t-values based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006).
+**              dcceO.pval                         MG estimators p-values based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006).
+**			    dcceO.out_mg                       Complete output table. 
+**			    dcceO.se_nw                        Newey-West robust SE.
+*/
+
+proc(1) = dcce_mg(data, ...);
     local idvec, tvec, t_n, starttvec, 
           endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, 
@@ -121,39 +191,63 @@ endp;
 **         PESARAN, M.H., (2006), ESTIMATION AND INFERENCE IN LARGE HETEROGENEOUS PANELS
 **         WITH A MULTIFACTOR ERROR STRUCTURE, ECONOMETRICA, VOL74, NO.4, PP.967-1012.
 **
-**  Format:  mg(data, x_common [, no_xbar, zero_x, zero_id, report ])
+**  Format:  mgOut = mg(data, mgCtl)
 **
 **  Input:   data        Data matrix, should contain:
 **                          * Group variable in the first column
 **                          * Time variable in the second column
 **                          * Dependent data in the third column
-**                          * Independent data beginning in the fourth column.  
-**           x_common    Matrix of common independent data. 
-**           no_xbar     Optional, identifier for X vars which are not used for CSA. Default
-**                       is to include all variables. 
-**           zero_x      Optional, column identifer for X vars which contain zeros 
-**                       for normalization. Must be specified if zero_id is specified.
-**           zero_id     Optional, group identifier for groups which contain zeros 
-**                       for normalization. Must be specified if zero_x is specified.
+**                          * Mean group independent variable data beginning in the fourth column.  
+**
+**           mgCtl       Optional argument, instance of mgControl structure containing the following members. 
+**
+**  
+**             mgCtl.x_common                    Matrix of common independent data to be included
+**                                               in mean group estimators.
+**             mgCtl.no_xbar                     Optional, identifier for X vars which are not 
+**                                               used for CSA. Default is to include all variables. 
+**             mgCtl.zero_x                      Optional, column identifer for X vars which contain 
+**                                               zeros  for normalization. Must be specified 
+**                                               if zero_id is specified. Default = 0.
+**             mgCtl.zero_id                     Optional, group identifier for groups which contain 
+**                                               zeros for normalization. Must be specified if 
+**                                               zero_x is specified. Default = 0.
 **
 **  Output:  mgO         Instance of an mgOut structure containing the 
 **                       following members:
 **
+**           Model Description
+**              mgO.panel_var                     Panel identifier variable.
+**              mgO.time_var                      Time variable.
+**              mgO.mg_vars                       Mean group variables.
+**              mgO.csa_vars                      Cross sectional average variables.
+**              mgO.y_varname                     Dependent variable.
+**              mgO.model                         Model type.
+**
+**           Model dimensions 
+**              mgO.nobs                          Total number of pooled observations.
+**              mgO.ngroups                       Number of groups. 
+**              mgO.numvars                       Number of MG variables. 
+**              mgO.obs_grp                       Number of observations per group.
+**              mgO.csa_lags                      Number of cross-sectional lags.
+**              mgO.k_reg                         Total number of vaiables in estimation regression.
+**              mgO.df                            Degrees of freedom without cross-sectional averages or CSA lags. 
+**              mgO.df_csa                        Degrees of freedom with cross-sectional averages and CSA lags.
+** 
+**           Model estimates
 **              mgO.b_vec                        Coefficient estimates by group. 
 **              mgO.b_mg                         Mean group estimators.
+**              mgO.e_mg                         Residuals.
+**			    mgO.cov_mg                       Mean group covariance matrix based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006). 
 **              mgO.se_mg                        MG estimators standard error based on non-parametric variance estimator of eq(58) 
 **                                               in Pesaran (2006).
 **              mgO.tvalue                       MG estimators t-values based on non-parametric variance estimator of eq(58) 
 **                                               in Pesaran (2006).
 **              mgO.pval                         MG estimators p-values based on non-parametric variance estimator of eq(58) 
 **                                               in Pesaran (2006).
-**			    mgO.cov_mg                       Mean group covariance matrix based on non-parametric variance estimator of eq(58) 
-**                                               in Pesaran (2006). 
-**			    mgO.sig_vec                      Nx1 vector of each sigma_i
-**			    mgO.e_mg                         Residuals
-**			    mgO.se_nw                        Newey-West robust SE.
-**			    mgO.se                           Coefficient SE.
 **			    mgO.out_mg                       Complete output table. 
+**			    mgO.se_nw                        Newey-West robust SE.
 */
 proc(1) = mg(data, ...);
     local idvec, tvec, t_n, starttvec, 
@@ -223,6 +317,72 @@ proc(1) = mg(data, ...);
     retp(mgO);    
 endp;
 
+/*
+**> cce
+**  Reference:
+**         PESARAN, M.H., (2006), ESTIMATION AND INFERENCE IN LARGE HETEROGENEOUS PANELS
+**         WITH A MULTIFACTOR ERROR STRUCTURE, ECONOMETRICA, VOL74, NO.4, PP.967-1012.
+**
+**  Format:  dcceO = dcce(data, mgCtl)
+**
+**  Input:   data        Data matrix, should contain:
+**                          * Group variable in the first column
+**                          * Time variable in the second column
+**                          * Dependent data in the third column
+**                          * Mean group independent variable data beginning in the fourth column.  
+**
+**           mgCtl       Optional argument, instance of mgControl structure containing the following members. 
+**
+**  
+**             mgCtl.x_common                    Matrix of common independent data to be included
+**                                               in mean group estimators.
+**             mgCtl.x_csa                       Matrix of data not included in MG estimators
+**                                               to be include in cross-sectional averages (CSA). 
+**             mgCtl.no_xbar                     Optional, identifier for X vars which are not 
+**                                               used for CSA. Default is to include all variables. 
+**             mgCtl.zero_x                      Optional, column identifer for X vars which contain 
+**                                               zeros  for normalization. Must be specified 
+**                                               if zero_id is specified. Default = 0.
+**             mgCtl.zero_id                     Optional, group identifier for groups which contain 
+**                                               zeros for normalization. Must be specified if 
+**                                               zero_x is specified. Default = 0.
+**
+**  Output:  cceO        Instance of an mgOut structure containing the 
+**                       following members:
+**
+**           Model Description
+**              cceO.panel_var                     Panel identifier variable.
+**              cceO.time_var                      Time variable.
+**              cceO.mg_vars                       Mean group variables.
+**              cceO.csa_vars                      Cross sectional average variables.
+**              cceO.y_varname                     Dependent variable.
+**              cceO.model                         Model type.
+**
+**           Model dimensions 
+**              cceO.nobs                          Total number of pooled observations.
+**              cceO.ngroups                       Number of groups. 
+**              cceO.numvars                       Number of MG variables. 
+**              cceO.obs_grp                       Number of observations per group.
+**              cceO.csa_lags                      Number of cross-sectional lags.
+**              cceO.k_reg                         Total number of vaiables in estimation regression.
+**              cceO.df                            Degrees of freedom without cross-sectional averages or CSA lags. 
+**              cceO.df_csa                        Degrees of freedom with cross-sectional averages and CSA lags.
+** 
+**           Model estimates
+**              cceO.b_vec                        Coefficient estimates by group. 
+**              cceO.b_mg                         Mean group estimators.
+**              cceO.e_mg                         Residuals.
+**			    cceO.cov_mg                       Mean group covariance matrix based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006). 
+**              cceO.se_mg                        MG estimators standard error based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006).
+**              cceO.tvalue                       MG estimators t-values based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006).
+**              cceO.pval                         MG estimators p-values based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006).
+**			    cceO.out_mg                       Complete output table. 
+**			    cceO.se_nw                        Newey-West robust SE.
+*/
 proc(1) = cce_mg(data, ...);
     local idvec, tvec, t_n, starttvec, 
           endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
