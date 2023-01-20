@@ -4,8 +4,8 @@ proc (0) = __print_mg_output(struct mgOut mgO);
    __print_mg_header(mgO);
    fmt1 = "%-20s%15s%5s%20s%15d";
     
-   sprintf("%15s", "Variable"$~"Coef."$~"SE"$~"T-value"$~"P-val");
-   sprintf("%15s%15.4f",  mgO.csa_vars, mgO.out_mg[1:rows(mgO.csa_vars), 2:cols(mgO.out_mg)]);
+   sprintf("%15s", "Variable"$~"Coef."$~"SE(NP)"$~"T-value(NP)"$~"P-val");
+   sprintf("%15s%15.4f",  mgO.mg_vars, mgO.out_mg[1:rows(mgO.mg_vars), 2:cols(mgO.out_mg)]);
    
     __print_mg_footer(mgO);
 endp;

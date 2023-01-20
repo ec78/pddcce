@@ -93,6 +93,8 @@
     struct mgOut cceO;
     cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx, PT);
     
+    // Perform CD test
+    
     // Store model description
     cceO.panel_var = groupvar;
     cceO.time_var = timevar;
@@ -137,9 +139,16 @@ endp;
 **  Output:  mgO         Instance of an mgOut structure containing the 
 **                       following members:
 **
-**              mgO.b_vec                        Coefficient estimates. 
+**              mgO.b_vec                        Coefficient estimates by group. 
 **              mgO.b_mg                         Mean group estimators.
-**			    mgO.cov_mg                       Mean group covariance matrix. 
+**              mgO.se_mg                        MG estimators standard error based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006).
+**              mgO.tvalue                       MG estimators t-values based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006).
+**              mgO.pval                         MG estimators p-values based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006).
+**			    mgO.cov_mg                       Mean group covariance matrix based on non-parametric variance estimator of eq(58) 
+**                                               in Pesaran (2006). 
 **			    mgO.sig_vec                      Nx1 vector of each sigma_i
 **			    mgO.e_mg                         Residuals
 **			    mgO.se_nw                        Newey-West robust SE.
@@ -195,6 +204,22 @@ proc(1) = mg(data, ...);
     struct mgOut mgO;
     mgO = _mg(yname', (xnames'$~dname)', y, x~h[.,1:cols(data_d)], n, tvec, zero_xx, zero_idx);
     
+    // Store model description
+    mgO.panel_var = groupvar;
+    mgO.time_var = timevar;
+    mgO.ngroups = n;
+    mgO.model = "Mean Group Estimator";
+    mgO.numvars = cols(x);
+    mgO.df = mgO.obs_grp - mgO.numvars;
+
+    mgO.y_varname = yname;
+    mgO.mg_vars = getcolnames(x);
+    mgO.csa_vars = "None";
+    
+    if ctl.report;
+        __print_mg_output(mgO);
+    endif;
+    
     retp(mgO);    
 endp;
 
@@ -202,7 +227,7 @@ proc(1) = cce_mg(data, ...);
     local idvec, tvec, t_n, starttvec, 
           endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, 
-          groupvar, timevar, zero_xx, zero_idx, datevec;
+          csa_vars, groupvar, timevar, zero_xx, zero_idx, datevec;
     
     /*
     ** Get  optional control structure
@@ -229,7 +254,12 @@ proc(1) = cce_mg(data, ...);
     
     // Cross section averages
     data_bar = getCSA(data, groupvar, timevar);
-
+    if ctl.x_csa != 0;
+        data_bar = getCSA(data[., 1:2]~ctl.x_csa, groupvar, timevar);
+    endif;
+    
+    csa_vars = getcolnames(data_bar[., 3:cols(data_bar)]);
+    
     // Get data mats
     { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, ctl.y_lags);
     data_d = setcolnames(data_d, dname');
@@ -252,15 +282,20 @@ proc(1) = cce_mg(data, ...);
     struct mgOut cceO;
     cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx);
     
+    // Store model description
+    cceO.panel_var = groupvar;
+    cceO.time_var = timevar;
+    cceO.ngroups = n;
+    cceO.model = "Mean Group Estimator";
+    cceO.numvars = cols(x);
+    cceO.df = cceO.obs_grp - cceO.numvars;
+
+    cceO.y_varname = yname;
+    cceO.mg_vars = getcolnames(x);
+    cceO.csa_vars = csa_vars;
+    
     if ctl.report;
-        "";
-        "++++++++++++++++ <Pesran's (2006) CCE Mean Group Estimates> ++++++++++++++++++++++++++++++++++++++++++++";
-        
-        "";
-        "   * CCE Mean Group Estimator is defined by eq(53).";
-        "   * se(NP) is the standard error based on non-parametric variance estimator of eq(58) in Pesaran (2006).";
-        "   * t(.) is associated t-ratio.";
-        "";
+        __print_mg_output(cceO);
     endif;
     retp(cceO);    
 endp;
@@ -591,7 +626,7 @@ endp;
 /* GENERAL DIAGNOSTIC TESTS FOR CROSS SECTION DEPENDENCE IN PANELS,     **/
 /*                                        PESARAN (2004).               **/
 /*                                                                      **/
-/* {cd_nt,pvalue_cd_nt,meanrho,used}=cdtest(e,n,tivec,starttvec,endtvec)**/
+/* {cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(e,n,tivec,starttvec,endtvec)**/
 /* [ this code allows unbalanced panel)                                 **/
 /*  where                                                               **/
 /*  cd_nt:  CD test statistic defined by eq. (7) in PESARAN (2004)      **/
