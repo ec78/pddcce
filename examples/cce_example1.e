@@ -17,16 +17,9 @@ fname = "examples/penn_sample.dta";
 data = loadd(fname, ". + date($year, '%Y')");
 
 
-// Control structure
-struct mgControl mgCtl;
-mgCtl = mgControlCreate();
-
-mgCtl.y_lags = 1;
-mgCtl.cr_lags = 3;
-
 // Set up reg data
 reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
 
 // Call regression
-struct mgOut mgO;
-mgO = dcce_mg(reg_data, mgctl);
+struct mgOut cceO;
+cceO = cce_mg(packr(reg_data));
