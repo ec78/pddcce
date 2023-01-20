@@ -14,11 +14,21 @@ struct mgOut {
 // Model description
 string panel_var;
 string time_var;
-string df;
-string df_csa;
+matrix df;
+matrix df_csa;
+string model;
+scalar k_reg;
+matrix csa_lags;
+
+//Variable names
+string array mg_vars;
+string array csa_vars;
+string y_varname;
+
 scalar nobs;
 scalar ngroups;
-scalar obs_grp;
+scalar numvars;
+matrix obs_grp;
 
 matrix cd_stat;
 matrix cd_pval;
@@ -26,7 +36,7 @@ matrix R_sq;
 
 matrix b_mg;
 matrix cov_mg;
-matrix z_stats;
+matrix tvalue;
 matrix pval;
 matrix ci;
 
@@ -35,6 +45,7 @@ matrix xxi;
 matrix b_vec;
 matrix se_nw;
 matrix se;
+matrix se_mg;
 matrix sig_vec;
 matrix out_mg;
 matrix cov_pcce_NW;

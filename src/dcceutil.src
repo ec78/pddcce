@@ -1,3 +1,74 @@
+proc (0) = __print_mg_output(struct mgOut mgO);
+    local fmt1;
+
+   __print_mg_header(mgO);
+   fmt1 = "%-20s%15s%5s%20s%15d";
+    
+   sprintf("%15s", "Variable"$~"Coef."$~"SE"$~"T-value"$~"P-val");
+   sprintf("%15s%15.4f",  mgO.csa_vars, mgO.out_mg[1:rows(mgO.csa_vars), 2:cols(mgO.out_mg)]);
+   
+    __print_mg_footer(mgO);
+endp;
+
+proc (0) = __print_mg_footer(struct mgOut mgO);
+    local wid, fmt1, fmt2, fmt3;
+    
+    // Print border of equal signs
+    wid = 75;
+    
+    
+    fmt1 = "%-20s%15s%5s%20s%15d";
+    fmt2 = "%-20s%15d%5s%20s%15d";
+    fmt3 = "%-20s%15d%5s%20s%15s";
+    
+    /*
+    ** This creates a four column header
+    ** describing the model
+    */
+    local tmp1;
+    tmp1 = miss();
+    print chrs(61*ones(wid, 1));
+    sprintf("MG variables: %10s", mgO.mg_vars');
+    sprintf("CSA variables: %10s", mgO.csa_vars');
+    print chrs(61*ones(wid, 1));
+   
+endp;
+
+proc (0) = __print_mg_header(struct mgOut mgO);
+    local wid, fmt1, fmt2, fmt3;
+    
+    // Print border of equal signs
+    wid = 75;
+    
+    
+    fmt1 = "%-20s%15s%5s%20s%15d";
+    fmt2 = "%-20s%15d%5s%20s%15d";
+    fmt3 = "%-20s%15d%5s%20s%15s";
+    
+    /*
+    ** This creates a four column header
+    ** describing the model
+    */
+
+    print chrs(61*ones(wid, 1));
+    sprintf("%-80s", mgO.model);
+    print chrs(61*ones(wid, 1));
+    sprintf(fmt1, "Panel Variable:", mgO.panel_var, "", "No. of obs:", mgO.nobs);
+    sprintf(fmt1, "Time Variable:", mgO.time_var, "", "No. of groups:", mgO.ngroups);
+    sprintf(fmt1, "Dependent Variable:",  mgO.y_varname, "", "No. CSA lags:", mgO.csa_lags);
+    if rows(mgO.obs_grp)==1;
+        sprintf(fmt2, "DF per group:", mgO.df, "", "Obs. per group:", mgO.obs_grp);
+        sprintf(fmt3, "DF per group w/csa:", mgO.df_csa, "", "", "");
+    else;
+        sprintf(fmt1, "","","", "Obs. per group:", "Unbalanced");
+    endif;
+
+    // Border of equal signs
+    print chrs(61*ones(wid, 1));
+    print;
+    
+endp;
+
 proc (1) = mgControlCreate();
     struct mgControl ctl;
     
@@ -11,6 +82,7 @@ proc (1) = mgControlCreate();
     ctl.cr_lags = 0;
     retp(ctl);
 endp;
+ 
 proc (6) = __olsIndividual(y_i, x_i, t_i, k, zero_id);
     local b_i, e_i, inverse_x_x, sig2_i, sig_i, se;
     
@@ -32,6 +104,36 @@ proc (6) = __olsIndividual(y_i, x_i, t_i, k, zero_id);
     retp(b_i, e_i, inverse_x_x, sig_i, sig2_i, se);
 endp;
 
+proc (1) = __getylag(y, starttvec, endtvec, datevec, isbalanced, n);
+    local indx1, indx2, tivec, y_wide, y_l, t;
+    
+    
+    
+    // Reshape data for lagging
+    if isbalanced;
+        t = rows(y)/n;
+        y_wide = reshape(y, n, t)';
+        y_l = lagn(y_wide, 1);
+        y_l = vec(y_l);
+        
+    else;
+        y_l = zeros(rows(y), 1);
+        
+        // Get indexes for lagging
+        indx1 = indnv(starttvec, datevec);
+        indx2 = indnv(endtvec, datevec);
+    
+        // Get cumulative tivec
+        tivec = 0|cumsumc((indx2-indx1+1));
+        for i(1, 1, rows(indx1));
+            y_l[tivec[i]:tivec[i+1], .] = lagn(y[tivec[i]:tivec[i+1], .], 1);
+        endfor;
+    endif;
+    
+    retp(y_l);
+endp;
+    
+    
 proc (3) = __getdlags(ybar, xbar, crlags);
     local PT, ybarlags, xbarlags, vars, lags, varnames;
     
@@ -78,6 +180,13 @@ proc (7) = _getDataMats(data, x_common, data_bar, no_xbar, ylag);
     // Get x and y
     y = data[., 3];
     x = data[., 4:cols(data)];
+    
+    // Add lagged y to dependent variables
+    if ylag != 0;
+        x = ylag~x;
+        x = setcolnames(x, getcolnames(y)$+"_l", 1);
+    endif;
+    
     t = rows(unique(data[., 2]));
     
     if not (data_bar == miss());
@@ -103,13 +212,7 @@ proc (7) = _getDataMats(data, x_common, data_bar, no_xbar, ylag);
     
     // Get common data
     data_d = __getDMat(x_common, t);
-    
-    // Add lags of y
-    if ylag;
-        x = lagn(y, 1)~x;
-        x = setcolnames(x, getcolnames(data_bar[. , 3])$+"_l", 1);
-    endif;
-    
+
     retp(y, x, data_d, ybar, xbar, ybarname, xbarname);
 endp;
 
@@ -281,3 +384,13 @@ proc (1) = __getPT(T);
     retp(int(T^1/3));
 endp;
 
+proc (1) = __pdbalanced(grp);
+    local num_grps, T, _isbalanced;
+    
+    num_grps = rows(unique(grp));
+    T = unique(counts(grp, unique(grp)));
+    
+    _isbalanced = rows(t) == 1;
+    
+    retp( _isbalanced);
+endp;

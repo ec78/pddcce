@@ -1,8 +1,9 @@
-proc(1) = dcce_mg(data, ...);
+ proc(1) = dcce_mg(data, ...);
     local idvec, tvec, t_n, starttvec, 
           endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, 
-          groupvar, timevar, zero_xx, zero_idx, ybarlags, xbarlags, PT, datevec;
+          groupvar, timevar, zero_xx, zero_idx, ybarlags, xbarlags, PT, datevec,
+          isbalanced, y_l, csa_vars;
     
     /*
     ** Get  optional control structure
@@ -16,6 +17,9 @@ proc(1) = dcce_mg(data, ...);
     // Get variable names
     { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
     
+    // Check if data is balanced
+    isbalanced = __pdbalanced(data[., 1]);
+    
     // Check for missing values
     if ismiss(data) .== miss();
         errorlogat "'dcce_mg': Missing Data Somewhere! This code does not allow it.";
@@ -27,11 +31,33 @@ proc(1) = dcce_mg(data, ...);
     n = rows(idvec);
     ivec = seqa(1, 1, n);
     
+    // Deal with y_lag
+    if ctl.y_lags;
+        y_l = __getylag(data[., 3], starttvec, endtvec, datevec, isbalanced, n);
+        y_l = delif(y_l, data[., 2] .== datevec[1]);
+        data = delif(data, data[., 2] .== datevec[1]);
+        
+        // Update startvec information
+        starttvec = aggregate(data[., groupvar timevar], "min", groupvar);
+        starttvec = starttvec[., 2];
+        miny = asDate(posixtostrc(minc(starttvec), "%Y"), "%Y");
+        
+        // Update datevec
+        datevec = datevec[2:rows(datevec)];
+        tvec = tvec - 1;
+        miny = miny+1;
+    endif;
+    
     // Cross section averages
     data_bar = getCSA(data, groupvar, timevar);
-
+    if ctl.x_csa != 0;
+        data_bar = getCSA(data[., 1:2]~ctl.x_csa, groupvar, timevar);
+    endif;
+    
+    csa_vars = getcolnames(data_bar[., 3:cols(data_bar)]);
+    
     // Get data mats
-    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, ctl.y_lags);
+    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, y_l);
     data_d = setcolnames(data_d, dname');
        
     // Get dynamic lags to include in 
@@ -42,15 +68,13 @@ proc(1) = dcce_mg(data, ...);
     // Form h mat for regression
     { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data), ybarlags, xbarlags, PT);
     
-    // Adjust timevars for lags
+    // Adjust timevars for CSA lags
     local cumtivec, start_i;
     cumtivec = 0|cumsumc(tvec);
     start_i = cumtivec + PT + 1;
-    start_i = start_i[1:rows(start_i)-1];
-        
+    start_i = start_i[1:rows(start_i)-1];       
     starttvec = data[start_i, timevar];
-    miny = minc(starttvec);
-
+    
     // Mean group estimation
     if ctl.zero_x==0;
         zero_xx = 0;
@@ -67,8 +91,25 @@ proc(1) = dcce_mg(data, ...);
     // Use MG estimation but include 
     // lags of CSA in h mat
     struct mgOut cceO;
-    cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx, PT, );
+    cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx, PT);
+    
+    // Store model description
+    cceO.panel_var = groupvar;
+    cceO.time_var = timevar;
+    cceO.ngroups = n;
+    cceO.model = "Dynamic Common Correlated Effects Estimator";
+    cceO.numvars = cols(x);
+    cceO.df = cceO.obs_grp - cceO.numvars;
 
+    cceO.y_varname = yname;
+    cceO.mg_vars = getcolnames(x);
+    cceO.csa_vars = csa_vars;
+
+    
+    if ctl.report;
+        __print_mg_output(cceO);
+    endif;
+    
     retp(cceO);    
 endp;
 
@@ -268,7 +309,8 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
         /*** t-test for each i ***/
         i=i+1;
     endo;
-
+    e_mg = packr(miss(e_mg, 0));
+    
     /*
     ** Adjustments for normalized variables 
     */
@@ -300,20 +342,43 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
     
     // Create dataframe containing output table
     results_mg = b_mg~se_mg~tvalue_mg;
-    out_mg = asDF(namevar[2:rows(namevar)], "y")~asDF(results_mg, "coeff", "se(NP)", "t(NP)");
+    
     
     
     struct mgOut mgO;
     mgO.b_mg = b_mg;
     mgO.cov_mg = cov_mg;
     mgO.e_mg = e_mg;
+    mgO.tvalue = tvalue_mg;
     mgO.xxi = inverse_x_x;
     mgO.b_vec = b_vec;
     mgO.se_nw = se_nw;
+    mgO.se_mg = se_mg;
     mgO.se = se;
     mgO.sig_vec = sig_vec;
-    mgO.out_mg = out_mg;
+    
     mgO.cov_pcce_NW = cov_pcce_rbst_NW; 
+    mgO.nobs = rows(e_mg);
+    mgO.ngroups = n;
+    mgO.k_reg = k;
+    mgO.csa_lags = PT;
+    
+    local tmp1;
+    tmp1 = unique(tivec);
+    
+    if rows(tmp1) == 1;
+        mgO.obs_grp = tmp1;
+    else;
+        mgO.obs_grp = tivec;
+    endif;
+    
+    mgO.df_csa = mgO.obs_grp - mgO.k_reg;
+    mgO.pval = 2*cdftc(mgO.tvalue, mgO.df_csa);
+    
+    // Output table
+    out_mg = asDF(namevar[2:rows(namevar)], "y")~asDF(results_mg~mgO.pval, "coeff", "se(NP)", "t(NP)", "P >|t|");
+    mgO.out_mg = out_mg;
+    
     retp(mgO);
 endp;
 
@@ -338,7 +403,7 @@ proc(1) = getCSA(data, groupvar, timevar, ...);
         data = data~x_csa;
     endif;
     
-    data_bar = aggregate(miss(data, 0), "mean", timevar);
+    data_bar = aggregate(missrv(data, 0), "mean", timevar);
     data_bar = order(data_bar, groupvar);
 
     retp(data_bar);
@@ -388,7 +453,7 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, starttvec, endtvec, years, b_ve
     local cumtivec, mx_mx, mx_y, i, y_i, x_i, h_i, m_h_i, mx_i;
     local b_pcce, e_pcce, sig2_pcce, cov_pcce, se_pcce, tvalue_pcce;
     local omega_h, e_pcce_i, out_pcce, sig_i_vec;
-    local namedep, namevar_pcce, results_pcce, st_results_pcce, nameh;
+    local namedep, namevar_pcce, results_pcce;
     local dof_i, ci_vec, namevar_h;
     local startyear, endyear, omega_nw, cov_pcce_rbst_nw;
     local lg, omega_h_i, z_i, gama0, gamas, s, iv_mx_mx;
