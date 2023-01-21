@@ -1,0 +1,20 @@
+{
+    "author": "Aptech Systems",
+    "deps": [
+    ],
+    "description": "Dynamic Common-Correlated Effects Estimators",
+    "dccelib": [
+    ],
+    "keywords": [
+    ],
+    "license": "GAUSS Standard License Agreement",
+    "name": "dccelib",
+    "repo": "",
+    "src": [
+        "cce.sdf",
+        "cce_mg.src",
+        "dcceutil.src"
+
+    ],
+    "version": "0.1.0"
+}
