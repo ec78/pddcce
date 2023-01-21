@@ -1,3 +1,5 @@
+#include cce.sdf
+
 proc (0) = __print_mg_output(struct mgOut mgO);
     local fmt1;
 
