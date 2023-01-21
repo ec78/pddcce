@@ -10,7 +10,7 @@ library dccelib;
 */
 
 // First load data
-fname = "examples/penn_sample.dta";
+fname = __FILE_DIR $+ "penn_sample.dta";
 data = loadd(fname, ". + date($year, '%Y')");
 
 
