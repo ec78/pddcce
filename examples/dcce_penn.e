@@ -1,8 +1,5 @@
 new;
-
-#include src/cce.sdf
-#include src/cce_mg.src
-#include src/dcceutil.src
+library dccelib;
 
 /*
 ** The dataset contains the following:
