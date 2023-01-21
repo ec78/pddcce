@@ -18,7 +18,7 @@ proc (0) = __print_mg_footer(struct mgOut mgO);
     
     
     fmt1 = "%-20s%15s%5s%20s%15d";
-    fmt2 = "%-20s%15d%5s%20s%15d";
+    fmt2 = "%-20s%15.4f%5s%20s%15.4f";
     fmt3 = "%-20s%15d%5s%20s%15s";
     
     /*
@@ -28,6 +28,7 @@ proc (0) = __print_mg_footer(struct mgOut mgO);
     local tmp1;
     tmp1 = miss();
     print chrs(61*ones(wid, 1));
+    sprintf(fmt2, "CD Test:", mgO.cd_stat, "", "CD p-value:", mgO.cd_pval);
     sprintf("MG variables: %10s", mgO.mg_vars');
     sprintf("CSA variables: %10s", mgO.csa_vars');
     print chrs(61*ones(wid, 1));
@@ -35,7 +36,7 @@ proc (0) = __print_mg_footer(struct mgOut mgO);
 endp;
 
 proc (0) = __print_mg_header(struct mgOut mgO);
-    local wid, fmt1, fmt2, fmt3;
+    local wid, fmt1, fmt2, fmt3, fmt4;
     
     // Print border of equal signs
     wid = 75;
@@ -44,7 +45,7 @@ proc (0) = __print_mg_header(struct mgOut mgO);
     fmt1 = "%-20s%15s%5s%20s%15d";
     fmt2 = "%-20s%15d%5s%20s%15d";
     fmt3 = "%-20s%15d%5s%20s%15s";
-    
+    fmt4 = "%-20s%15.4f%5s%20s%15.4f";
     /*
     ** This creates a four column header
     ** describing the model
@@ -62,7 +63,8 @@ proc (0) = __print_mg_header(struct mgOut mgO);
     else;
         sprintf(fmt1, "","","", "Obs. per group:", "Unbalanced");
     endif;
-
+    sprintf(fmt2, "CD Test:", mgO.cd_stat, "", "CD p-value:", mgO.cd_pval);
+    
     // Border of equal signs
     print chrs(61*ones(wid, 1));
     print;

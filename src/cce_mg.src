@@ -1,10 +1,10 @@
 /*
-**> dcce
+**> dcce_mg
 **  Reference:
 **         PESARAN, M.H., (2006), ESTIMATION AND INFERENCE IN LARGE HETEROGENEOUS PANELS
 **         WITH A MULTIFACTOR ERROR STRUCTURE, ECONOMETRICA, VOL74, NO.4, PP.967-1012.
 **
-**  Format:  dcceO = dcce(data, mgCtl)
+**  Format:  dcceO = dcce_mg(data, mgCtl)
 **
 **  Input:   data        Data matrix, should contain:
 **                          * Group variable in the first column
@@ -73,7 +73,7 @@ proc(1) = dcce_mg(data, ...);
           endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, 
           groupvar, timevar, zero_xx, zero_idx, ybarlags, xbarlags, PT, datevec,
-          isbalanced, y_l, csa_vars;
+          isbalanced, y_l, csa_vars, cd_nt, pvalue_cd_nt, meanrho, used;
     
     /*
     ** Get  optional control structure
@@ -116,6 +116,7 @@ proc(1) = dcce_mg(data, ...);
         datevec = datevec[2:rows(datevec)];
         tvec = tvec - 1;
         miny = miny+1;
+        maxt = maxt - 1;
     endif;
     
     // Cross section averages
@@ -164,8 +165,16 @@ proc(1) = dcce_mg(data, ...);
     cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx, PT);
     
     // Perform CD test
+    // Index vector
+    local start_j , end_j;
+    
+    start_j = indnv(starttvec, datevec)-PT;
+    end_j = indnv(endtvec, datevec)-PT;
+    { cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(cceO.e_mg, n, tvec-PT, start_j, end_j);
     
     // Store model description
+    cceO.cd_stat = cd_nt;
+    cceO.cd_pval = pvalue_cd_nt;
     cceO.panel_var = groupvar;
     cceO.time_var = timevar;
     cceO.ngroups = n;
@@ -253,7 +262,7 @@ proc(1) = mg(data, ...);
     local idvec, tvec, t_n, starttvec, 
           endtvec, miny, maxy, mint, maxt, n, ivec, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, groupvar, 
-          timevar, zero_xx, zero_idx, datevec;
+          timevar, zero_xx, zero_idx, datevec, cd_nt, pvalue_cd_nt, meanrho, used;
     
     /*
     ** Get  optional control structure
@@ -298,6 +307,18 @@ proc(1) = mg(data, ...);
     struct mgOut mgO;
     mgO = _mg(yname', (xnames'$~dname)', y, x~h[.,1:cols(data_d)], n, tvec, zero_xx, zero_idx);
     
+    // Perform CD test
+    // Index vector
+    local start_j , end_j;
+    
+    start_j = indnv(starttvec, datevec);
+    end_j = indnv(endtvec, datevec);
+    { cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(mgO.e_mg, n, tvec, start_j, end_j);
+    
+    // Store model description
+    mgO.cd_stat = cd_nt;
+    mgO.cd_pval = pvalue_cd_nt;
+    
     // Store model description
     mgO.panel_var = groupvar;
     mgO.time_var = timevar;
@@ -318,12 +339,12 @@ proc(1) = mg(data, ...);
 endp;
 
 /*
-**> cce
+**> cce_mg
 **  Reference:
 **         PESARAN, M.H., (2006), ESTIMATION AND INFERENCE IN LARGE HETEROGENEOUS PANELS
 **         WITH A MULTIFACTOR ERROR STRUCTURE, ECONOMETRICA, VOL74, NO.4, PP.967-1012.
 **
-**  Format:  dcceO = dcce(data, mgCtl)
+**  Format:  cceO = cce_mg(data, mgCtl)
 **
 **  Input:   data        Data matrix, should contain:
 **                          * Group variable in the first column
@@ -387,7 +408,8 @@ proc(1) = cce_mg(data, ...);
     local idvec, tvec, t_n, starttvec, 
           endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, 
-          csa_vars, groupvar, timevar, zero_xx, zero_idx, datevec;
+          csa_vars, groupvar, timevar, zero_xx, zero_idx, datevec,
+          cd_nt, pvalue_cd_nt, meanrho, used;
     
     /*
     ** Get  optional control structure
@@ -441,6 +463,18 @@ proc(1) = cce_mg(data, ...);
 
     struct mgOut cceO;
     cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx);
+    
+    // Perform CD test
+    // Index vector
+    local start_j , end_j;
+    
+    start_j = indnv(starttvec, datevec);
+    end_j = indnv(endtvec, datevec);
+    { cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(cceO.e_mg, n, tvec, start_j, end_j);
+    
+    // Store model description
+    cceO.cd_stat = cd_nt;
+    cceO.cd_pval = pvalue_cd_nt;
     
     // Store model description
     cceO.panel_var = groupvar;
@@ -753,12 +787,7 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, starttvec, endtvec, years, b_ve
     namevar_h=varname_cce[cols(x)+2:cols(varname_cce')];
     results_pcce=b_pcce~sqrt(diag(cov_pcce_hs2))~(b_pcce./sqrt(diag(cov_pcce_hs2)))
         ~sqrt(diag(cov_pcce_rbst_NW))~(b_pcce./sqrt(diag(cov_pcce_rbst_NW)));
-//    st_results_pcce=ftocv(results_pcce, 7, 7);
-//    nameh=namedep$~"coeff"$~"se(NP)"$~"t(NP)"$~"se(NW)"$~"t(NW)";
-    /*
-    endif;
-    
-    */
+
     out_pcce = asDF(namevar_pcce, "y")~asDF(results_pcce, "coeff","se(NP)","t(NP)","se(NW)","t(NW)");
     
     struct pcceNWOut pcceO;
@@ -778,46 +807,43 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, starttvec, endtvec, years, b_ve
     
 endp;
 
-/*************************************************************************/
-/* NOTE: This code is preliminary, please do NOT distribut.             **/
-/* Please report any problems you might have, to: ty228@econ.cam.ac.uk  **/
-/*                                                                      **/
-/* This code computes CD test statistics defined by eq. (7) in          **/
-/* GENERAL DIAGNOSTIC TESTS FOR CROSS SECTION DEPENDENCE IN PANELS,     **/
-/*                                        PESARAN (2004).               **/
-/*                                                                      **/
-/* {cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(e,n,tivec,starttvec,endtvec)**/
-/* [ this code allows unbalanced panel)                                 **/
-/*  where                                                               **/
-/*  cd_nt:  CD test statistic defined by eq. (7) in PESARAN (2004)      **/
-/*  pvalue_cd_nt: p-value of CD test                                    **/
-/*  meanrho: simple average of residual correlation coefficients rho_ij **/
-/*              defined by eq. (3) in Pesaran (2004)                    **/
-/*  used:   (used number of combinations of rho_ij)/(N(N-1)/2)          **/
-/*  WITH ARGUMENTS                                                      **/
-/*      e: (NT x 1 for balanced panel) stucked residual vector          **/
-/*        e=(e_11,e_12,...,e_1T, e_21,e_22,...,e_2T, ... ,e_N1,e_N2,...,e_NT)' **/
-/*      n: number of cross sections                                     **/
-/*      tivec: (N x 1) vector of number of observations of cross        **/
-/*            section unit i, T_i's                                     **/
-/*            for balanced panel, tivec=T*ones(n,1);                    **/
-/*            for unbalanced panel, eg., (20,20,18,17,18)' for N=5      **/
-/*      starttvec:(N x 1) vector of starting year of i's                **/
-/*            for balanced panel, starttvec=ones(n,1);                  **/
-/*            for unbalanced panel, eg., (1971,1971,1973,1972,1971)'    **/
-/*      endttvec:(N x 1) vector of end year of i's                      **/
-/*            for balanced panel, endttvec=T*ones(n,1);                 **/
-/*            for unbalanced panel, eg., (1996,1996,1994,1997,1980)'    **/
-/*                                                                      **/
-/* NOTE: When T_ij<4, rho_ij is not calculable, so need to be discarded **/
-/*      where T_ij is the number of orverlapped years between i and j   **/
-/*      eg. i has 1971-1980 and j has 1967-1975, T_ij=5                 **/
-/*                                                                      **/
-/* Takashi Yamagata, 3rd June 2005                                      **/
-/*                                                                      **/
-/*************************************************************************/
-
-proc(1) = cdtest(e, n, tivec, starttvec, endtvec);
+/*
+**  cdtest
+**  Reference:
+**         GENERAL DIAGNOSTIC TESTS FOR CROSS SECTION DEPENDENCE IN PANELS,
+**         PESARAN (2004).
+**
+**  Format:  { cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(e, n, tivec, starttvec, endtvec)
+**
+**  Input:   e                      (NT x 1 for balanced panel) stucked residual vector
+**
+**           n                      Number of cross-sections. 
+**
+**           tivec                  (N x 1) vector of number of observations of cross       
+**                                  section unit i, T_i's                                    
+**                                  for balanced panel, tivec=T*ones(n,1);                    
+**                                  for unbalanced panel, eg., (20,20,18,17,18)' for N=5     
+**                                               
+**           starttvec              (N x 1) vector of starting year of i's
+**                                  for balanced panel, starttvec=ones(n,1);
+**                                  for unbalanced panel, eg., 
+**                                  (1971,1971,1973,1972,1971)'
+**                                               
+**           endtvec                (N x 1) vector of end year of i's                 
+**                                  for balanced panel, endttvec=T*ones(n,1);       
+**                                  for unbalanced panel, eg., 
+**                                  (1996,1996,1994,1997,1980)'    
+**
+**  Output:  cd_nt                  CD test statistic defined by eq. (7) in PESARAN (2004).                  
+**
+**           pvalue_cd_nt           p-value of CD test                 
+**           
+**           meanrho                Simple average of residual correlation coefficients rho_ij 
+**                                  defined by eq. (3) in Pesaran (2004)
+**
+**           used                   Used number of combinations of rho_ij[(N(N-1)/2)]
+*/
+proc(4) = cdtest(e, n, tivec, starttvec, endtvec);
     
     local cumtivec, T_rho, i, e_i, startt_i, endt_i, j, e_j, startt_j, endt_j;
     local t_s, t_e, e_i_t, e_j_t, T_rho_ij, cd_nt, pvalue_cd_nt;
@@ -837,7 +863,8 @@ proc(1) = cdtest(e, n, tivec, starttvec, endtvec);
         endt_i=endtvec[i];
         j=i+1;
         do while j<=N;
-            
+            cumtivec[j]+1;
+            cumtivec[j+1];
             e_j=e[cumtivec[j]+1:cumtivec[j+1]];
             startt_j=starttvec[j];
             endt_j=endtvec[j];
@@ -880,12 +907,7 @@ proc(1) = cdtest(e, n, tivec, starttvec, endtvec);
     
     pvalue_CD_nt = 2*cdfnc(abs(CD_nt)); /** two sided!!*/
     used=((n*(n-1)/2)-disc)/(n*(n-1)/2);
+  
     
-    struct cdOut cdO;
-    cdO.cd_nt = cd_nt;
-    cdO.pvalue_cd_nt = pvalue_cd_nt;
-    cdO.meanrho = meanrho;
-    cdO.used = used;
-    
-    retp(cdO);
+    retp(cd_nt, pvalue_cd_nt, meanrho, used);
 endp;
