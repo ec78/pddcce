@@ -286,9 +286,9 @@ proc (5) = __getnames(data, x_common, x_csa, ylag);
         xnames = "y_l"$|xnames;
     endif;
     
-    if x_csa;
+    if x_csa != 0;
         if hasmetadata(x_csa);
-            xnames = xnames$~getColnames(x_csa);
+            xnames = xnames$|getColnames(x_csa);
         else;
             local tmp;
             tmp = "x_csa" $+ itos(seqa(1, 1, cols(x_csa)));

@@ -106,8 +106,13 @@ proc(1) = dcce_mg(data, ...);
     // Deal with y_lag
     if ctl.y_lags;
         y_l = __getylag(data[., 3], starttvec, endtvec, datevec, isbalanced, n);
-        y_l = delif(y_l, data[., 2] .== datevec[1]);
-        data = delif(data, data[., 2] .== datevec[1]);
+        local e;
+        e = (data[., 2] .== datevec[1]);
+        y_l = delif(y_l, e);
+        data = delif(data, e);
+        if ctl.x_csa != 0;
+            ctl.x_csa = delif(ctl.x_csa, e);
+        endif;
         
         // Update startvec information
         starttvec = aggregate(data[., groupvar timevar], "min", groupvar);
@@ -122,11 +127,7 @@ proc(1) = dcce_mg(data, ...);
     endif;
     
     // Cross section averages
-    data_bar = getCSA(data, groupvar, timevar);
-    if ctl.x_csa != 0;
-        data_bar = getCSA(data[., 1:2]~ctl.x_csa, groupvar, timevar);
-    endif;
-    
+    data_bar = getCSA(data, groupvar, timevar, ctl.x_csa);
     csa_vars = getcolnames(data_bar[., 3:cols(data_bar)]);
     
     // Get data mats
@@ -137,7 +138,13 @@ proc(1) = dcce_mg(data, ...);
     // regression (occurs here because noCSA x's are
     // removed in _getDataMats)
     { ybarlags, xbarlags, PT } = __getdlags(ybar, xbar, ctl.cr_lags);
- 
+    
+    // Remove x_csa name from xnames
+    // after generating xbarnames
+    if ctl.x_csa != 0;
+        xnames = xnames[1:cols(x)];
+    endif;
+    
     // Form h mat for regression
     { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data), ybarlags, xbarlags, PT);
     
@@ -437,16 +444,18 @@ proc(1) = cce_mg(data, ...);
     ivec = seqa(1, 1, n);
     
     // Cross section averages
-    data_bar = getCSA(data, groupvar, timevar);
-    if ctl.x_csa != 0;
-        data_bar = getCSA(data[., 1:2]~ctl.x_csa, groupvar, timevar);
-    endif;
-    
+    data_bar = getCSA(data, groupvar, timevar, ctl.x_csa);
     csa_vars = getcolnames(data_bar[., 3:cols(data_bar)]);
     
     // Get data mats
     { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, ctl.y_lags);
     data_d = setcolnames(data_d, dname');
+    
+    // Remove x_csa name from xnames
+    // after generating xbarnames
+    if ctl.x_csa != 0;
+        xnames = xnames[1:cols(x)];
+    endif;
     
     { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data));
     
@@ -621,12 +630,12 @@ proc(1) = getCSA(data, groupvar, timevar, ...);
     // getlags          The number of lags to include for dynamic regression
     x_csa = dynargsGet(1, 0);
     
-    if x_csa;
+    if x_csa != 0;
         
         // Check row compatibility
-        if rows(x_csa) != rows(data_bar);
+        if rows(x_csa) != rows(data);
             errorlogat "'dcce_mg': Number of observations must match number of rows in original\n
-                         data to be included in cross-sectional averages.";
+data to be included in cross-sectional averages.";
             end;
         endif;
         
