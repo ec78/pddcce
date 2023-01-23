@@ -11,8 +11,7 @@ library dccelib;
 
 // First load data
 fname = __FILE_DIR $+ "penn_sample.dta";
-data = loadd(fname, ". + date($year, '%Y')");
-
+data = packr(loadd(fname, ". + date($year, '%Y')"));
 
 // Set up reg data
 reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];

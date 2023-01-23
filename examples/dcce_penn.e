@@ -18,8 +18,15 @@ data = loadd(fname, ". + date($year, '%Y')");
 struct mgControl mgCtl;
 mgCtl = mgControlCreate();
 
+// Implement lag of y
 mgCtl.y_lags = 1;
+
+// Number of lags of CSA
 mgCtl.cr_lags = 3;
+
+// Include `log_hc` in 
+// the CSA
+mgCtl.x_csa = data[., "log_hc"];
 
 // Set up reg data
 reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
