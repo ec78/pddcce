@@ -13,7 +13,6 @@ library dccelib;
 fname = __FILE_DIR $+ "penn_sample.dta";
 data = loadd(fname, ". + date($year, '%Y')");
 
-
 // Control structure
 struct mgControl mgCtl;
 mgCtl = mgControlCreate();
