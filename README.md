@@ -9,7 +9,7 @@ The DCCE library requires:
 
 
 ### Installing
-The GAUSS state space library can be installed using the [GAUSS applications installer](https://www.aptech.com/support/installation/using-the-applications-installer-wizard/).
+The GAUSS DCCE library can be installed using the [GAUSS applications installer](https://www.aptech.com/support/installation/using-the-applications-installer-wizard/).
 
 **Please do not download the source code and install manually. You will not be able to properly install the library.**
 
