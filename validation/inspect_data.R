@@ -1,0 +1,13 @@
+library(haven)
+
+d <- read_dta("examples/penn_sample.dta")
+cat("Dims:", nrow(d), "x", ncol(d), "\n")
+cat("Cols:", paste(names(d), collapse=", "), "\n")
+cat("N groups:", length(unique(d$id)), "\n")
+cat("T range:", min(d$year), "-", max(d$year), "\n")
+cat("Obs per group (first 5):\n")
+print(head(table(d$id), 5))
+cat("Missing values per column:\n")
+print(colSums(is.na(d)))
+cat("Head:\n")
+print(head(d))

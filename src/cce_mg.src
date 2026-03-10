@@ -491,18 +491,18 @@ proc(1) = cce_mg(data, ...);
     cceO.panel_var = groupvar;
     cceO.time_var = timevar;
     cceO.ngroups = n;
-    cceO.model = "Mean Group Estimator";
+    cceO.model = "Common Correlated Effects Mean Group Estimator";
     cceO.numvars = cols(x);
     cceO.df = cceO.obs_grp - cceO.numvars;
 
     cceO.y_varname = yname;
     cceO.mg_vars = getcolnames(x);
     cceO.csa_vars = csa_vars;
-    
+
     if ctl.report;
         __print_mg_output(cceO);
     endif;
-    retp(cceO);    
+    retp(cceO);
 endp;
 
 proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
@@ -689,133 +689,126 @@ endp;
 **
 */
 proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, starttvec, endtvec, years, b_vec_mg);
-    
-    local cumtivec, mx_mx, mx_y, i, y_i, x_i, h_i, m_h_i, mx_i;
-    local b_pcce, e_pcce, sig2_pcce, cov_pcce, se_pcce, tvalue_pcce;
-    local omega_h, e_pcce_i, out_pcce, sig_i_vec;
-    local namedep, namevar_pcce, results_pcce;
-    local dof_i, ci_vec, namevar_h;
-    local startyear, endyear, omega_nw, cov_pcce_rbst_nw;
-    local lg, omega_h_i, z_i, gama0, gamas, s, iv_mx_mx;
-    local omega_hs2, cov_pcce_hs2, b_mean;
-    
-    cumtivec=0|cumsumc(tivec);
-    mx_mx=zeros(cols(x),cols(x)); /** sum of (mx_i'mx_i) **/
-    mx_y=zeros(cols(x),1);		   /** sum of (mx_i'y_i)    **/
-    omega_h=zeros(cols(x),cols(x));
-    iv_mx_mx=zeros(cols(x),cols(x));
-    i=1;
-    do while i<=n;
-        y_i = y[cumtivec[i]+1:cumtivec[i+1]];
-        x_i = x[cumtivec[i]+1:cumtivec[i+1],.];
-        h_i = h[cumtivec[i]+1:cumtivec[i+1],.];
-        m_h_i = (eye(tivec[i])-h_i*pinv(h_i'h_i)*h_i');
-        mx_i = m_h_i*x_i;
-        mx_mx = mx_mx + mx_i'mx_i;
-        /* iv_mx_mx=iv_mx_mx+(sig_cce[i]^2)*pinv(mx_i'mx_i);*/
-        mx_y = mx_y + mx_i'y_i;
-        
-        if i==1;
-            startyear = years[starttvec[i]];
-            endyear = years[endtvec[i]];
-        else;
-            startyear = startyear|years[starttvec[i]];
-            endyear = endyear|years[endtvec[i]];
-        endif;
-        
-        i=i+1;
-    endo;
-    
-    /** beta hat PCCE **/
-    b_pcce =pinv(mx_mx)*mx_y;
 
-    /** residuals & coefficients on Hi **/
-    i=1;
-    sig_i_vec=zeros(n,1);
-    ci_vec=zeros(n,cols(h));
-    do while i<=n;
-        y_i=y[cumtivec[i]+1:cumtivec[i+1]];
-        x_i=x[cumtivec[i]+1:cumtivec[i+1],.];
-        h_i=h[cumtivec[i]+1:cumtivec[i+1],.];
-        m_h_i=(eye(tivec[i])-h_i*invpd(h_i'h_i)*h_i');
-        ci_vec[i,.]=(inv(h_i'h_i)*h_i'(y_i-x_i*b_pcce))';/**coeffcients on Hi**/
-        
-        if i==1;
-            e_pcce=m_h_i*y_i - m_h_i*x_i*b_pcce;
-            sig_i_vec[i]=sqrt((m_h_i*y_i - m_h_i*x_i*b_pcce)'(m_h_i*y_i - m_h_i*x_i*b_pcce)/(tivec[i]-cols(h)));
-            
-        else;
-            e_pcce=e_pcce|(m_h_i*y_i - m_h_i*x_i*b_pcce);
-            dof_i = sumc(diag(m_h_i));
-            sig_i_vec[i]=
-                sqrt((m_h_i*y_i - m_h_i*x_i*b_pcce)'(m_h_i*y_i - m_h_i*x_i*b_pcce)/(tivec[i]-cols(h)));
-            
-        endif;
-        i=i+1;
+    local cumtivec, mx_mx, mx_y, i, y_i, x_i, h_i, m_h_i, mx_i, hh_inv;
+    local b_pcce, e_pcce, e_pcce_i, sig2_pcce, cov_pcce, se_pcce, tvalue_pcce;
+    local out_pcce, sig_i_vec, namedep, namevar_pcce, results_pcce;
+    local dof_i, ci_vec, namevar_h, startyear, endyear;
+    local omega_nw, cov_pcce_rbst_nw, lg, omega_h_i, z_i, gama0, gamas, s;
+    local omega_hs2, cov_pcce_hs2, b_mean, kx;
+
+    kx = cols(x);
+    cumtivec = 0|cumsumc(tivec);
+
+    // --- Loop 1: accumulate M_h*X and M_h*y for pooled estimator ---
+    mx_mx = zeros(kx, kx);
+    mx_y  = zeros(kx, 1);
+    startyear = zeros(n, 1);
+    endyear   = zeros(n, 1);
+
+    i = 1;
+    do while i <= n;
+        y_i   = y[cumtivec[i]+1:cumtivec[i+1]];
+        x_i   = x[cumtivec[i]+1:cumtivec[i+1], .];
+        h_i   = h[cumtivec[i]+1:cumtivec[i+1], .];
+        hh_inv = invpd(h_i'h_i);
+        m_h_i  = eye(tivec[i]) - h_i*hh_inv*h_i';
+        mx_i   = m_h_i*x_i;
+        mx_mx  = mx_mx + mx_i'mx_i;
+        mx_y   = mx_y  + mx_i'y_i;
+        startyear[i] = years[starttvec[i]];
+        endyear[i]   = years[endtvec[i]];
+        i = i+1;
     endo;
-    sig2_pcce=e_pcce'e_pcce/(sumc(tivec)-n*cols(h)-cols(x_i));
-    cov_pcce=sig2_pcce*(inv(mx_mx));
-    se_pcce=sqrt(diag(cov_pcce));
-    tvalue_pcce=b_pcce./se_pcce;
-    
-    omega_nw=zeros(cols(mx_i),cols(mx_i));
-    omega_hs2=zeros(cols(mx_i),cols(mx_i));/* (6.54) **/
-    b_mean=meanc(b_vec_mg);
-    i=1;
-    do while i<=n;
-        e_pcce_i=e_pcce[cumtivec[i]+1:cumtivec[i+1]];
-        x_i=x[cumtivec[i]+1:cumtivec[i+1],.];
-        h_i=h[cumtivec[i]+1:cumtivec[i+1],.];
-        m_h_i=(eye(tivec[i])-h_i*invpd(h_i'h_i)*h_i');
-        
-        mx_i=m_h_i*x_i;
-        
-        lg=round(4*(Tivec[i]/100)^(2/9));/*lg=2*Tivec[i]^(1/4);*//*minc(N|ceil(2*Sqrt(T)))*/
-        omega_h_i=0;
-        z_i=e_pcce_i.*mx_i;
-        gama0=(z_i'z_i);
-        
-        s=1;
-        do while s<=lg;
-            gamas=(z_i[s+1:tivec[i],.])'(z_i[1:tivec[i]-s,.]);
-            omega_h_i=omega_h_i + (1-s/(lg+1))*(gamas+gamas');
-            s=s+1;
+
+    // Pooled PCCE estimator
+    b_pcce = pinv(mx_mx)*mx_y;
+
+    // --- Loop 2: residuals, variance components, NW kernel — single pass ---
+    e_pcce    = zeros(rows(y), 1);    // pre-allocate: avoids repeated reallocation
+    sig_i_vec = zeros(n, 1);
+    ci_vec    = zeros(n, cols(h));
+    omega_nw  = zeros(kx, kx);
+    omega_hs2 = zeros(kx, kx);       // Pesaran (2006) eq.(6.54)
+    b_mean    = meanc(b_vec_mg);
+
+    i = 1;
+    do while i <= n;
+        local r1, r2;
+        r1 = cumtivec[i]+1;
+        r2 = cumtivec[i+1];
+
+        y_i   = y[r1:r2];
+        x_i   = x[r1:r2, .];
+        h_i   = h[r1:r2, .];
+        hh_inv = invpd(h_i'h_i);
+        m_h_i  = eye(tivec[i]) - h_i*hh_inv*h_i';
+        mx_i   = m_h_i*x_i;
+
+        // Coefficients on H_i and partialled-out residuals
+        ci_vec[i, .] = (hh_inv*h_i'*(y_i - x_i*b_pcce))';
+        e_pcce[r1:r2] = m_h_i*(y_i - x_i*b_pcce);
+
+        sig_i_vec[i] = sqrt(e_pcce[r1:r2]'e_pcce[r1:r2] / (tivec[i] - cols(h)));
+
+        // Newey-West kernel bandwidth (Andrews 1991 rule)
+        lg = round(4*(tivec[i]/100)^(2/9));
+        omega_h_i = 0;
+        z_i   = e_pcce[r1:r2].*mx_i;
+        gama0 = z_i'z_i;
+
+        s = 1;
+        do while s <= lg;
+            gamas     = (z_i[s+1:tivec[i], .])'(z_i[1:tivec[i]-s, .]);
+            omega_h_i = omega_h_i + (1 - s/(lg+1))*(gamas + gamas');
+            s = s+1;
         endo;
-        /*N-W*/          omega_nw=omega_nw + (gama0+omega_h_i);
-        omega_hs2=omega_hs2
-            + (mx_i'mx_i)*(b_vec_mg[i,.]-b_mean[1:cols(mx_i)]')'
-            (b_vec_mg[i,.]-b_mean[1:cols(mx_i)]')*(mx_i'mx_i);
-        i=i+1;
+        omega_nw = omega_nw + (gama0 + omega_h_i);
+
+        // Pesaran non-parametric variance (hs2)
+        local db;
+        db = (b_vec_mg[i, .] - b_mean[1:cols(mx_i)]')';
+        omega_hs2 = omega_hs2 + (mx_i'mx_i)*(db*db')*(mx_i'mx_i);
+
+        i = i+1;
     endo;
-    
-    cov_pcce_rbst_NW = pinv(mx_mx)*omega_nw*pinv(mx_mx);
-    cov_pcce_hs2 = pinv(mx_mx/n)*(omega_hs2/(n-1))*pinv(mx_mx/n)/n;
-    
-    format /rd 9,5;
-    
-    namedep=varname_cce[1];
-    namevar_pcce=varname_cce[2:cols(x)+1];
-    namevar_h=varname_cce[cols(x)+2:cols(varname_cce')];
-    results_pcce=b_pcce~sqrt(diag(cov_pcce_hs2))~(b_pcce./sqrt(diag(cov_pcce_hs2)))
-        ~sqrt(diag(cov_pcce_rbst_NW))~(b_pcce./sqrt(diag(cov_pcce_rbst_NW)));
+
+    // Scalar variance and standard covariance matrices
+    sig2_pcce = e_pcce'e_pcce / (sumc(tivec) - n*cols(h) - kx);
+    // Compute (M_x'M_x)^{-1} once; reuse for all covariance matrices
+    local inv_mx;
+    inv_mx      = pinv(mx_mx);
+    cov_pcce    = sig2_pcce * inv_mx;
+    se_pcce     = sqrt(diag(cov_pcce));
+    tvalue_pcce = b_pcce./se_pcce;
+
+    // Robust covariance matrices
+    cov_pcce_rbst_nw = inv_mx*omega_nw*inv_mx;
+    cov_pcce_hs2     = pinv(mx_mx/n)*(omega_hs2/(n-1))*pinv(mx_mx/n)/n;
+
+    namedep      = varname_cce[1];
+    namevar_pcce = varname_cce[2:kx+1];
+    namevar_h    = varname_cce[kx+2:cols(varname_cce')];
+    results_pcce = b_pcce ~ sqrt(diag(cov_pcce_hs2)) ~ (b_pcce./sqrt(diag(cov_pcce_hs2)))
+                          ~ sqrt(diag(cov_pcce_rbst_nw)) ~ (b_pcce./sqrt(diag(cov_pcce_rbst_nw)));
 
     out_pcce = asDF(namevar_pcce, "y")~asDF(results_pcce, "coeff","se(NP)","t(NP)","se(NW)","t(NW)");
-    
+
     struct pcceNWOut pcceO;
-    pcceO.b_pcce = b_pcce;
-    pcceO.cov_pcce = cov_pcce;
-    pcceO.sig2_pcce  = sig2_pcce;
-    pcceO.e_pcce = e_pcce;
-    pcceO.se_pcce = se_pcce;
-    pcceO.tvalue_pcce = tvalue_pcce;
-    pcceO.out_pcce = out_pcce;
-    pcceO.ci_vec = ci_vec;
-    pcceO.sig_i_vec = sig_i_vec;
+    pcceO.b_pcce          = b_pcce;
+    pcceO.cov_pcce        = cov_pcce;
+    pcceO.sig2_pcce       = sig2_pcce;
+    pcceO.e_pcce          = e_pcce;
+    pcceO.se_pcce         = se_pcce;
+    pcceO.tvalue_pcce     = tvalue_pcce;
+    pcceO.out_pcce        = out_pcce;
+    pcceO.ci_vec          = ci_vec;
+    pcceO.sig_i_vec       = sig_i_vec;
     pcceO.cov_pcce_rbst_nw = cov_pcce_rbst_nw;
-    pcceO.cov_pcce_hs2 = cov_pcce_hs2;
-    
+    pcceO.cov_pcce_hs2    = cov_pcce_hs2;
+
     retp(pcceO);
-    
+
 endp;
 
 /*
@@ -874,8 +867,6 @@ proc(4) = cdtest(e, n, tivec, starttvec, endtvec);
         endt_i=endtvec[i];
         j=i+1;
         do while j<=N;
-            cumtivec[j]+1;
-            cumtivec[j+1];
             e_j=e[cumtivec[j]+1:cumtivec[j+1]];
             startt_j=starttvec[j];
             endt_j=endtvec[j];

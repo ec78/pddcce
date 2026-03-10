@@ -88,23 +88,26 @@ proc (1) = mgControlCreate();
 endp;
  
 proc (6) = __olsIndividual(y_i, x_i, t_i, k, zero_id);
-    local b_i, e_i, inverse_x_x, sig2_i, sig_i, se;
-    
-    // OLS for group i
-    b_i = pinv(x_i'x_i)*x_i'y_i;
-    e_i = y_i-x_i*b_i;
-    inverse_x_x = /*inverse_x_x + */pinv(x_i'x_i); /*** For Hausman test 1 ***/
-    
+    local b_i, e_i, inverse_x_x, sig2_i, sig_i, se, xx;
+
+    // OLS for group i — compute (X'X)^{-1} once; reuse for b and SE.
+    // pinv() handles rank-deficient designs gracefully.
+    xx = x_i'x_i;
+    inverse_x_x = pinv(xx);
+    b_i = inverse_x_x * (x_i'y_i);
+
+    e_i = y_i - x_i*b_i;
+
     // Sig for group i
     if zero_id;
         sig_i = sqrt(e_i'e_i/(t_i-k+1));
     else;
         sig_i = sqrt(e_i'e_i/(t_i-k));
     endif;
-    
+
     sig2_i = sig_i^2;
-    se = /*se|*/sqrt(diag(sig2_i*pinv(x_i'x_i)))';
-    
+    se = sqrt(diag(sig2_i*inverse_x_x))';
+
     retp(b_i, e_i, inverse_x_x, sig_i, sig2_i, se);
 endp;
 
@@ -122,15 +125,15 @@ proc (1) = __getylag(y, starttvec, endtvec, datevec, isbalanced, n);
         
     else;
         y_l = zeros(rows(y), 1);
-        
+
         // Get indexes for lagging
         indx1 = indnv(starttvec, datevec);
         indx2 = indnv(endtvec, datevec);
-    
-        // Get cumulative tivec
+
+        // Get cumulative tivec (0-based offsets)
         tivec = 0|cumsumc((indx2-indx1+1));
-        for i(1, 1, rows(indx1));
-            y_l[tivec[i]:tivec[i+1], .] = lagn(y[tivec[i]:tivec[i+1], .], 1);
+        for i(1, rows(indx1), 1);
+            y_l[tivec[i]+1:tivec[i+1], .] = lagn(y[tivec[i]+1:tivec[i+1], .], 1);
         endfor;
     endif;
     
@@ -318,7 +321,7 @@ proc (10) = _getTimeInfo(data, groupvar, timevar, ...);
     tvec = counts(data[., groupvar],  idvec);
     
     // Count length by variable
-    t_n = counts(data[., "year"], unique(data[., "year"]));
+    t_n = counts(data[., timevar], unique(data[., timevar]));
     
     // Start and end time vec
     starttvec = aggregate(data[., groupvar timevar], "min", groupvar);
@@ -336,7 +339,7 @@ proc (10) = _getTimeInfo(data, groupvar, timevar, ...);
     if PT;
         local cumtivec, start_i;
         cumtivec = 0|cumsumc(tvec);
-        start_i = cumtivec + 3 + 1;
+        start_i = cumtivec + PT + 1;
         start_i = start_i[1:rows(start_i)-1];
         
         starttvec = data[start_i, timevar];
@@ -385,7 +388,7 @@ proc(1) = __reshapeH(h_i, starttvec, endtvec, datevec, bigT);
 endp;
 
 proc (1) = __getPT(T);
-    retp(int(T^1/3));
+    retp(int(T^(1/3)));
 endp;
 
 proc (1) = __pdbalanced(grp);
