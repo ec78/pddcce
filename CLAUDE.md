@@ -11,7 +11,7 @@ The library provides three main estimators plus companion diagnostic and inferen
 **Author:** Eric Clower, Aptech Systems, Inc. (`eric@aptech.com`)
 **Target:** GAUSS 23+
 **License:** Non-commercial public use only
-**Package version:** 0.2.0
+**Package version:** 0.3.0
 
 ---
 
@@ -29,7 +29,8 @@ pddcce/
 │   ├── slopehomo.src       # Pesaran-Yamagata (2008) slope homogeneity tests
 │   ├── cips.src            # Pesaran (2007) CIPS panel unit root test
 │   ├── latex_export.src    # LaTeX table export (single and multi-model)
-│   └── bootstrap.src       # Wild bootstrap standard errors for MG estimators
+│   ├── bootstrap.src       # Wild bootstrap standard errors for MG estimators
+│   └── bias_correct.src    # Half-panel jackknife (HPJ) bias correction
 ├── examples/
 │   ├── mg_penn.e           # MG estimator example (Penn World Tables)
 │   ├── cce_penn.e          # CCE-MG example
@@ -82,6 +83,8 @@ Key GAUSS conventions used in this codebase:
 | `x_csa` | 0 | Extra vars for CSA not in main regression |
 | `report` | 1 | 1 = print results table automatically |
 | `pooled` | 0 | 1 = also run pooled CCE (`pcceNW`) |
+| `i1` | 0 | 1 = add first-differenced CSA (KPY 2011; for I(1) regressors) |
+| `two_way` | 0 | 1 = time-demean data before CCE (two-way CCE with time FE) |
 
 ### `mgOut` — Results output structure
 | Member | Description |
@@ -140,6 +143,12 @@ Key GAUSS conventions used in this codebase:
 | `cips(data, [p, demean])` | Pesaran (2007) CIPS panel unit root test |
 | `print_cips(cips_stat, cadf_vec, p, demean)` | Print CIPS results |
 
+### Bias correction (`src/bias_correct.src`)
+
+| Procedure | Description |
+|-----------|-------------|
+| `hpj(data, mgCtl, [estimator_type])` | Half-panel jackknife bias correction (Dhaene & Jochmans 2015) |
+
 ### Export & inference (`src/latex_export.src`, `src/bootstrap.src`)
 
 | Procedure | Description |
@@ -147,6 +156,13 @@ Key GAUSS conventions used in this codebase:
 | `mgOutToLatex(mgO, filename, [se_type, note])` | Export single model to .tex |
 | `mgOutToLatexMulti(mgO_arr, labels, filename, [note])` | Export 2–6 models side-by-side |
 | `mgBootstrap(data, mgCtl, [B, estimator_type])` | Wild bootstrap SEs (Rademacher weights) |
+
+### Extended estimator flags (built into `cce_mg`, `dcce_mg`)
+
+| Flag | Ref. | Description |
+|------|------|-------------|
+| `ctl.i1 = 1` | Kapetanios, Pesaran & Yamagata (2011) | Adds Δȳₜ and Δx̄ₜ to h matrix; ensures CCE consistency with I(1) common factors |
+| `ctl.two_way = 1` | Bai (2009) | Time-demeans y, x, and x_csa before CCE; handles both time-specific and cross-sectional common shocks |
 
 ---
 

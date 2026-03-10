@@ -62,6 +62,16 @@ proc(1) = dcce_mg(data, ...);
     n    = rows(idvec);
     ivec = seqa(1, 1, n);
 
+    // Two-way CCE: time-demean y and x before computing CSA.
+    // This adds a time fixed-effect layer (orthogonal to the CSA augmentation)
+    // so the model accounts for both individual heterogeneity and time-specific shocks.
+    if ctl.two_way;
+        data = __timedemean(data, groupvar, timevar);
+        if ctl.x_csa != 0;
+            ctl.x_csa = __timedemean_xcsa(ctl.x_csa, data[., timevar]);
+        endif;
+    endif;
+
     // Deal with y_lag
     if ctl.y_lags;
         y_l = __getylag(data[., 3], starttvec, endtvec, datevec, isbalanced, n);
@@ -101,6 +111,15 @@ proc(1) = dcce_mg(data, ...);
 
     // Form h mat for regression
     { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data), ybarlags, xbarlags, PT);
+
+    // I(1) augmentation (KPY 2011): add first-differenced CSA alongside levels.
+    // Ensures CCE consistency when common factors are integrated.
+    if ctl.i1;
+        local dh_i1, dhname_i1;
+        { dh_i1, dhname_i1 } = __addDiffCSA(ybar, xbar, starttvec, endtvec, datevec, rows(data));
+        h     = h ~ dh_i1;
+        hname = hname $| dhname_i1;
+    endif;
 
     // Adjust starttvec for CSA lags
     local cumtivec, start_i;
@@ -269,6 +288,14 @@ proc(1) = cce_mg(data, ...);
     n    = rows(idvec);
     ivec = seqa(1, 1, n);
 
+    // Two-way CCE: time-demean before computing CSA
+    if ctl.two_way;
+        data = __timedemean(data, groupvar, timevar);
+        if ctl.x_csa != 0;
+            ctl.x_csa = __timedemean_xcsa(ctl.x_csa, data[., timevar]);
+        endif;
+    endif;
+
     // Cross-section averages
     data_bar = getCSA(data, groupvar, timevar, ctl.x_csa);
     csa_vars = getcolnames(data_bar[., 3:cols(data_bar)]);
@@ -282,6 +309,14 @@ proc(1) = cce_mg(data, ...);
     endif;
 
     { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data));
+
+    // I(1) augmentation: add first-differenced CSA
+    if ctl.i1;
+        local dh_i1, dhname_i1;
+        { dh_i1, dhname_i1 } = __addDiffCSA(ybar, xbar, starttvec, endtvec, datevec, rows(data));
+        h     = h ~ dh_i1;
+        hname = hname $| dhname_i1;
+    endif;
 
     if ctl.zero_x == 0;
         zero_xx = 0;

@@ -1,0 +1,171 @@
+#include cce.sdf
+
+/*
+**> hpj
+**
+**  Half-Panel Jackknife (HPJ) bias correction for MG, CCE-MG, and DCCE-MG estimators.
+**
+**  Reference:
+**    DHAENE, G. AND JOCHMANS, K. (2015), SPLIT-PANEL JACKKNIFE ESTIMATION OF FIXED-EFFECT
+**    MODELS, THE REVIEW OF ECONOMIC STUDIES, 82(3), 991-1030.
+**
+**  The bias of the MG estimator in dynamic panels is O(1/T). The HPJ corrects this
+**  by combining the full-sample estimate with estimates on the first and second halves
+**  of the time dimension for each group:
+**
+**    b̂_hpj = 2 b̂_full − (b̂_h1 + b̂_h2) / 2
+**
+**  where b̂_full is estimated on the full panel and b̂_h1, b̂_h2 on each half.
+**
+**  Standard errors: the NP SE from the full-sample estimate is used as a conservative
+**  approximation. For HPJ-specific SE, use mgBootstrap() after obtaining HPJ estimates.
+**
+**  Format:  hpjO = hpj(data, mgCtl [, estimator_type])
+**
+**  Input:   data            Panel dataframe (same format as mg/cce_mg/dcce_mg).
+**           mgCtl           mgControl struct. Same ctl used for the original model.
+**           estimator_type  Optional string: "mg", "cce_mg" (default), or "dcce_mg".
+**
+**  Output:  hpjO            mgOut struct with HPJ-corrected b_mg.
+**                           .b_mg   = HPJ bias-corrected MG estimate
+**                           .se_mg  = NP SE from full-sample (conservative)
+**                           .tvalue, .pval, .ci recomputed from HPJ b_mg
+**                           .b_mg_full  = original (uncorrected) full-sample b_mg
+**                           .b_mg_h1    = first-half estimate
+**                           .b_mg_h2    = second-half estimate
+**
+**  Note: b_mg_full, b_mg_h1, b_mg_h2 are stored in .b_stats columns 1-3 for access.
+**
+**  Usage:
+**    struct mgControl ctl;
+**    ctl = mgControlCreate();
+**    ctl.y_lags  = 1;
+**    ctl.cr_lags = 3;
+**    ctl.x_csa   = data[., "log_hc"];
+**    hpjO = hpj(data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"], ctl, "dcce_mg");
+**    print hpjO.b_mg;   // HPJ bias-corrected estimates
+*/
+proc (1) = hpj(data, struct mgControl ctl, ...);
+
+    local estimator_type;
+    estimator_type = dynargsGet(1, "cce_mg");
+
+    // Suppress printing during half-panel runs
+    local ctl_s;
+    ctl_s        = ctl;
+    ctl_s.report = 0;
+
+    // Split panel row indices
+    local idx_h1, idx_h2;
+    { idx_h1, idx_h2 } = __panel_half_indices(data);
+
+    // Build half-panel datasets
+    local data_h1, data_h2, ctl_h1, ctl_h2;
+    data_h1 = data[idx_h1, .];
+    data_h2 = data[idx_h2, .];
+    ctl_h1  = ctl_s;
+    ctl_h2  = ctl_s;
+
+    // Split x_csa if present
+    if ctl.x_csa != 0;
+        ctl_h1.x_csa = ctl.x_csa[idx_h1, .];
+        ctl_h2.x_csa = ctl.x_csa[idx_h2, .];
+    endif;
+
+    // Estimate on full panel and both halves
+    struct mgOut mgO_full, mgO_h1, mgO_h2;
+    mgO_full = __mg_call(data,    ctl_s,  estimator_type);
+    mgO_h1   = __mg_call(data_h1, ctl_h1, estimator_type);
+    mgO_h2   = __mg_call(data_h2, ctl_h2, estimator_type);
+
+    // HPJ formula — applied to MG variables only (first numvars columns of b_mg)
+    local k, b_full, b_h1, b_h2, b_hpj;
+    k      = mgO_full.numvars;
+    b_full = mgO_full.b_mg[1:k];
+    b_h1   = mgO_h1.b_mg[1:k];
+    b_h2   = mgO_h2.b_mg[1:k];
+    b_hpj  = 2*b_full - 0.5*(b_h1 + b_h2);
+
+    // Build output — start from full-sample result, replace b_mg
+    struct mgOut hpjO;
+    hpjO            = mgO_full;
+    hpjO.b_mg       = b_hpj;
+    hpjO.tvalue     = b_hpj ./ mgO_full.se_mg[1:k];
+    hpjO.pval       = 2*cdftc(hpjO.tvalue, mgO_full.df_csa);
+    hpjO.ci         = b_hpj - 1.96*mgO_full.se_mg[1:k] ~ b_hpj + 1.96*mgO_full.se_mg[1:k];
+
+    // Store all three estimates in b_stats for easy access:
+    //   col 1: full-panel b_mg, col 2: first-half, col 3: second-half, col 4: HPJ
+    hpjO.b_stats = b_full ~ b_h1 ~ b_h2 ~ b_hpj;
+    hpjO.model   = mgO_full.model $+ " [HPJ Bias-Corrected]";
+
+    // Rebuild output table with HPJ estimates
+    local results_hpj, namevar;
+    results_hpj  = b_hpj ~ mgO_full.se_mg[1:k] ~ hpjO.tvalue ~ hpjO.pval;
+    namevar      = mgO_full.mg_vars[1:k];
+    hpjO.out_mg  = asDF(namevar, "y") ~
+                   asDF(results_hpj, "coeff", "se(NP)", "t(NP)", "P >|t|");
+
+    if ctl.report;
+        __print_mg_output(hpjO);
+    endif;
+
+    retp(hpjO);
+endp;
+
+
+/*
+** __panel_half_indices
+**
+** Returns row indices for the first and second time-halves of each panel group.
+** Used internally by hpj().
+*/
+proc (2) = __panel_half_indices(data);
+
+    local groupvar, idvec, tvec, cumtivec, n, t_h1, t_total;
+    local idx_h1, idx_h2, offset_h1, offset_h2, i, r1, t1, t2;
+
+    groupvar  = getcolnames(data)[1];
+    idvec     = unique(data[., groupvar]);
+    tvec      = counts(data[., groupvar], idvec);
+    n         = rows(idvec);
+    cumtivec  = 0|cumsumc(tvec);
+
+    // Total rows in each half
+    t_h1    = sumc(floor(tvec/2));
+    t_total = sumc(tvec);
+
+    idx_h1    = zeros(t_h1,          1);
+    idx_h2    = zeros(t_total-t_h1,  1);
+    offset_h1 = 1;
+    offset_h2 = 1;
+
+    for i(1, n, 1);
+        r1 = cumtivec[i]+1;
+        t1 = floor(tvec[i]/2);    // first-half length
+        t2 = tvec[i] - t1;        // second-half length
+
+        idx_h1[offset_h1:offset_h1+t1-1] = seqa(r1,    1, t1);
+        idx_h2[offset_h2:offset_h2+t2-1] = seqa(r1+t1, 1, t2);
+        offset_h1 = offset_h1 + t1;
+        offset_h2 = offset_h2 + t2;
+    endfor;
+
+    retp(idx_h1, idx_h2);
+endp;
+
+
+/*
+** __mg_call  —  Dispatch helper: calls mg, cce_mg, or dcce_mg by name.
+*/
+proc (1) = __mg_call(data, struct mgControl ctl, estimator_type);
+    struct mgOut mgO;
+    if estimator_type $== "mg";
+        mgO = mg(data, ctl);
+    elseif estimator_type $== "dcce_mg";
+        mgO = dcce_mg(data, ctl);
+    else;
+        mgO = cce_mg(data, ctl);
+    endif;
+    retp(mgO);
+endp;

@@ -8,6 +8,8 @@ matrix x_common;
 matrix x_csa;
 matrix report;
 matrix pooled;      // 1 = also run pooled CCE (pcceNW). Default 0.
+matrix i1;          // 1 = add first-differenced CSA (KPY 2011, for I(1) regressors). Default 0.
+matrix two_way;     // 1 = time-demean data before CCE (two-way CCE with time FE). Default 0.
 };
 
 struct mgOut {

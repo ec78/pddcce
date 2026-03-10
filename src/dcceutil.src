@@ -65,6 +65,8 @@ proc (1) = mgControlCreate();
     ctl.x_csa    = 0;
     ctl.cr_lags  = 0;
     ctl.pooled   = 0;
+    ctl.i1       = 0;
+    ctl.two_way  = 0;
     retp(ctl);
 endp;
 
@@ -407,4 +409,89 @@ proc (1) = __pdbalanced(grp);
     _isbalanced = rows(T) == 1;
 
     retp(_isbalanced);
+endp;
+
+
+/*
+** __timedemean
+**
+** Subtracts the cross-sectional mean at each time period from y and x (columns 3+).
+** Panel id (col 1) and time (col 2) are left unchanged.
+** Used to implement two-way CCE: time-demean before computing cross-sectional averages
+** so the model accounts for time-specific common shocks AND cross-section dependence.
+*/
+proc (1) = __timedemean(data, groupvar, timevar);
+    local data_bar_t, datevec, time_obs, time_idx, data_demeaned;
+
+    // Cross-sectional means at each time period (T × cols(data))
+    data_bar_t = aggregate(data, "mean", timevar);
+    data_bar_t = order(data_bar_t, timevar);
+
+    // Sorted unique time values (aligned with data_bar_t row order)
+    datevec = sortc(unique(data[., timevar]), 1);
+
+    // Map each observation to its time's row in data_bar_t
+    time_obs = data[., timevar];
+    time_idx = indnv(time_obs, datevec);    // NT×1 integer index into datevec
+
+    // Subtract time mean from y and x columns only
+    data_demeaned = data;
+    data_demeaned[., 3:cols(data)] = data[., 3:cols(data)] -
+                                      data_bar_t[time_idx, 3:cols(data_bar_t)];
+
+    retp(data_demeaned);
+endp;
+
+
+/*
+** __timedemean_xcsa
+**
+** Time-demeans an auxiliary x_csa matrix (NT × k, no id/time columns).
+** Requires the panel time column so cross-sectional means can be identified.
+** Used when ctl.two_way = 1 and ctl.x_csa != 0.
+*/
+proc (1) = __timedemean_xcsa(x_csa, time_col);
+    local datevec, T, k, time_means, time_idx, i, mask;
+
+    datevec = sortc(unique(time_col), 1);
+    T       = rows(datevec);
+    k       = cols(x_csa);
+
+    // Compute mean of x_csa at each time period
+    time_means = zeros(T, k);
+    for i(1, T, 1);
+        mask           = time_col .== datevec[i];
+        time_means[i, .] = meanc(selif(x_csa, mask))';
+    endfor;
+
+    // Map back to each observation
+    time_idx = indnv(time_col, datevec);
+
+    retp(x_csa - time_means[time_idx, .]);
+endp;
+
+
+/*
+** __addDiffCSA
+**
+** Computes first-differenced cross-sectional averages (Δȳₜ, Δx̄ₜ) and reshapes
+** them into panel format.  Used when ctl.i1 = 1 (KPY 2011, I(1) regressors):
+** adding differenced CSA alongside standard CSA levels ensures CCE consistency
+** when the common factors are integrated.
+*/
+proc (2) = __addDiffCSA(ybar, xbar, starttvec, endtvec, datevec, bigT);
+    local dybar, dxbar, h_diff, dname;
+
+    // First differences of cross-sectional averages
+    dybar = ybar - lagn(ybar, 1);
+    dybar = setcolnames(dybar, getcolnames(ybar) $+ "_d");
+
+    dxbar = xbar - lagn(xbar, 1);
+    dxbar = setcolnames(dxbar, getcolnames(xbar) $+ "_d");
+
+    // Reshape to stacked panel format
+    h_diff = __reshapeH(dybar~dxbar, starttvec, endtvec, datevec, bigT);
+    dname  = getcolnames(dybar~dxbar)';
+
+    retp(h_diff, dname);
 endp;

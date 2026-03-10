@@ -17,7 +17,8 @@
         "slopehomo.src",
         "cips.src",
         "latex_export.src",
-        "bootstrap.src"
+        "bootstrap.src",
+        "bias_correct.src"
     ],
-    "version": "0.2.0"
+    "version": "0.3.0"
 }
