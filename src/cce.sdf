@@ -7,6 +7,7 @@ matrix no_xbar;
 matrix x_common;
 matrix x_csa;
 matrix report;
+matrix pooled;      // 1 = also run pooled CCE (pcceNW). Default 0.
 };
 
 struct mgOut {
@@ -32,27 +33,31 @@ matrix df_csa;
 // Model diagnostics
 matrix cd_stat;
 matrix cd_pval;
-matrix R_sq;
+matrix R_sq;           // Mean within-group R² (averaged across groups)
 
 // Model estimates
-matrix b_vec;
-matrix b_mg;
-matrix e_mg;
-matrix cov_mg;
-matrix se_mg;
-matrix tvalue;
-matrix pval;
-matrix out_mg;
-matrix ci;
+matrix b_vec;          // n×k individual group estimates
+matrix b_mg;           // k×1 mean group estimates
+matrix e_mg;           // pooled residuals
+matrix cov_mg;         // k×k MG covariance (NP estimator, Pesaran 2006 eq.58)
+matrix se_mg;          // k×1 MG standard errors
+matrix tvalue;         // k×1 t-values
+matrix pval;           // k×1 p-values
+matrix out_mg;         // formatted output dataframe
+matrix ci;             // k×2 95% confidence intervals [lb, ub]
+matrix b_stats;        // k×4 heterogeneity table: [min, mean, max, sd] across groups
 
-
-matrix xxi;
-matrix sig_vec;
-matrix se;
+matrix xxi;            // k×k (X'X) for last group (legacy)
+matrix xxi_vec;        // n×k² per-group X'X matrices (row-vectorised); used by slopehomo
+matrix sig_vec;        // n×1 per-group residual standard deviations
+matrix se;             // n×k per-group OLS standard errors
 
 // NW SE
 matrix se_nw;
 matrix cov_pcce_NW;
+
+// Pooled CCE results (populated when mgCtl.pooled = 1)
+struct pcceNWOut pcce;
 };
 
 struct cdOut {

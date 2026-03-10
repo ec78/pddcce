@@ -1,128 +1,138 @@
 #include cce.sdf
 
+/*
+** __print_mg_output
+**
+** Prints a formatted results table for any mgOut struct (MG, CCE-MG, DCCE-MG).
+** Called automatically when mgCtl.report = 1 (the default).
+*/
 proc (0) = __print_mg_output(struct mgOut mgO);
-    local fmt1;
+    local wid, fmt_si, fmt_sf, fmt_ss, fmt_h, fmt_r, k, i;
 
-   __print_mg_header(mgO);
-   fmt1 = "%-20s%15s%5s%20s%15d";
-    
-   sprintf("%15s", "Variable"$~"Coef."$~"SE(NP)"$~"T-value(NP)"$~"P-val");
-   sprintf("%15s%15.4f",  mgO.mg_vars, mgO.out_mg[1:rows(mgO.mg_vars), 2:cols(mgO.out_mg)]);
-   
-    __print_mg_footer(mgO);
-endp;
-
-proc (0) = __print_mg_footer(struct mgOut mgO);
-    local wid, fmt1, fmt2, fmt3;
-    
-    // Print border of equal signs
-    wid = 75;
-    
-    
-    fmt1 = "%-20s%15s%5s%20s%15d";
-    fmt2 = "%-20s%15.4f%5s%20s%15.4f";
-    fmt3 = "%-20s%15d%5s%20s%15s";
-    
-    /*
-    ** This creates a four column header
-    ** describing the model
-    */
-    local tmp1;
-    tmp1 = miss();
-    print chrs(61*ones(wid, 1));
-    sprintf(fmt2, "CD Test:", mgO.cd_stat, "", "CD p-value:", mgO.cd_pval);
-    sprintf("MG variables: %10s", mgO.mg_vars');
-    sprintf("CSA variables: %10s", mgO.csa_vars');
-    print chrs(61*ones(wid, 1));
-   
-endp;
-
-proc (0) = __print_mg_header(struct mgOut mgO);
-    local wid, fmt1, fmt2, fmt3, fmt4;
-    
-    // Print border of equal signs
-    wid = 75;
-    
-    
-    fmt1 = "%-20s%15s%5s%20s%15d";
-    fmt2 = "%-20s%15d%5s%20s%15d";
-    fmt3 = "%-20s%15d%5s%20s%15s";
-    fmt4 = "%-20s%15.4f%5s%20s%15.4f";
-    /*
-    ** This creates a four column header
-    ** describing the model
-    */
+    wid = 78;
+    fmt_si = "  %-28s %-12d   %-24s %-12d";
+    fmt_sf = "  %-28s %-12.4f   %-24s %-12.4f";
+    fmt_ss = "  %-28s %-12s   %-24s %-12s";
+    fmt_h  = "  %-22s %13s %13s %13s %13s";
+    fmt_r  = "  %-22s %13.6f %13.6f %13.6f %13.6f";
 
     print chrs(61*ones(wid, 1));
-    sprintf("%-80s", mgO.model);
+    print mgO.model;
     print chrs(61*ones(wid, 1));
-    sprintf(fmt1, "Panel Variable:", mgO.panel_var, "", "No. of obs:", mgO.nobs);
-    sprintf(fmt1, "Time Variable:", mgO.time_var, "", "No. of groups:", mgO.ngroups);
-    sprintf(fmt1, "Dependent Variable:",  mgO.y_varname, "", "No. CSA lags:", mgO.csa_lags);
-    if rows(mgO.obs_grp)==1;
-        sprintf(fmt2, "DF per group:", mgO.df, "", "Obs. per group:", mgO.obs_grp);
-        sprintf(fmt3, "DF per group w/csa:", mgO.df_csa, "", "", "");
+
+    sprintf(fmt_si, "Panel Variable:",    mgO.panel_var,  "No. of obs:",     mgO.nobs);
+    sprintf(fmt_si, "Time Variable:",     mgO.time_var,   "No. of groups:",  mgO.ngroups);
+    sprintf(fmt_ss, "Dependent Var:",     mgO.y_varname,  "No. CSA lags:",   mgO.csa_lags);
+
+    if not ismiss(mgO.R_sq);
+        sprintf(fmt_sf, "CD stat:", mgO.cd_stat, "CD p-value:", mgO.cd_pval);
+        sprintf("  %-28s %-12.4f", "Mean within-group R²:", mgO.R_sq);
     else;
-        sprintf(fmt1, "","","", "Obs. per group:", "Unbalanced");
+        sprintf(fmt_sf, "CD stat:", mgO.cd_stat, "CD p-value:", mgO.cd_pval);
     endif;
-    sprintf(fmt2, "CD Test:", mgO.cd_stat, "", "CD p-value:", mgO.cd_pval);
-    
-    // Border of equal signs
+
+    if rows(mgO.obs_grp) == 1;
+        sprintf(fmt_si, "DF per group:", mgO.df, "Obs. per group:", mgO.obs_grp);
+        sprintf(fmt_si, "DF per group (w/CSA):", mgO.df_csa, "", 0);
+    else;
+        sprintf(fmt_ss, "Obs. per group:", "Unbalanced", "", "");
+    endif;
+
+    print chrs(45*ones(wid, 1));
+    sprintf(fmt_h, "Variable", "Coef.", "SE(NP)", "t(NP)", "P>|t|");
+    print chrs(45*ones(wid, 1));
+
+    k = rows(mgO.b_mg);
+    for i(1, k, 1);
+        sprintf(fmt_r, mgO.mg_vars[i],
+            mgO.b_mg[i], mgO.se_mg[i], mgO.tvalue[i], mgO.pval[i]);
+    endfor;
+
     print chrs(61*ones(wid, 1));
-    print;
-    
+    print "";
 endp;
+
 
 proc (1) = mgControlCreate();
     struct mgControl ctl;
-    
-    ctl.no_xbar = 0;
-    ctl.zero_x = 0;
-    ctl.zero_id = 0;
-    ctl.report = 1;
-    ctl.y_lags = 0;
+
+    ctl.no_xbar  = 0;
+    ctl.zero_x   = 0;
+    ctl.zero_id  = 0;
+    ctl.report   = 1;
+    ctl.y_lags   = 0;
     ctl.x_common = 0;
-    ctl.x_csa = 0;
-    ctl.cr_lags = 0;
+    ctl.x_csa    = 0;
+    ctl.cr_lags  = 0;
+    ctl.pooled   = 0;
     retp(ctl);
 endp;
- 
-proc (6) = __olsIndividual(y_i, x_i, t_i, k, zero_id);
-    local b_i, e_i, inverse_x_x, sig2_i, sig_i, se, xx;
 
-    // OLS for group i — compute (X'X)^{-1} once; reuse for b and SE.
+
+/*
+** coeftable
+**
+** Returns the MG results as a plain numeric matrix (k×4):
+**   columns: [coef, se_NP, t_NP, p_NP]
+** Useful for downstream computations without the dataframe wrapper.
+*/
+proc (1) = coeftable(struct mgOut mgO);
+    retp(mgO.b_mg ~ mgO.se_mg ~ mgO.tvalue ~ mgO.pval);
+endp;
+
+
+/*
+** __olsIndividual
+**
+** Per-group OLS.  Returns 7 values:
+**   b_i          k×1 coefficient vector
+**   e_i          t_i×1 residuals
+**   inverse_x_x  k×k (X'X)^{-1}
+**   sig_i        scalar residual SD
+**   sig2_i       scalar residual variance
+**   se           1×k individual OLS standard errors
+**   r2_i         scalar within-group R²
+*/
+proc (7) = __olsIndividual(y_i, x_i, t_i, k, zero_id);
+    local b_i, e_i, inverse_x_x, sig2_i, sig_i, se, xx, r2_i, ss_tot;
+
+    // OLS — compute (X'X)^{-1} once; reuse for b and SE.
     // pinv() handles rank-deficient designs gracefully.
-    xx = x_i'x_i;
+    xx          = x_i'x_i;
     inverse_x_x = pinv(xx);
-    b_i = inverse_x_x * (x_i'y_i);
+    b_i         = inverse_x_x * (x_i'y_i);
+    e_i         = y_i - x_i*b_i;
 
-    e_i = y_i - x_i*b_i;
-
-    // Sig for group i
     if zero_id;
-        sig_i = sqrt(e_i'e_i/(t_i-k+1));
+        sig_i = sqrt(e_i'e_i / (t_i - k + 1));
     else;
-        sig_i = sqrt(e_i'e_i/(t_i-k));
+        sig_i = sqrt(e_i'e_i / (t_i - k));
     endif;
 
     sig2_i = sig_i^2;
-    se = sqrt(diag(sig2_i*inverse_x_x))';
+    se     = sqrt(diag(sig2_i * inverse_x_x))';
 
-    retp(b_i, e_i, inverse_x_x, sig_i, sig2_i, se);
+    // Within-group R²
+    ss_tot = (y_i - meanc(y_i))'(y_i - meanc(y_i));
+    if ss_tot > 0;
+        r2_i = 1 - (e_i'e_i) / ss_tot;
+    else;
+        r2_i = miss();
+    endif;
+
+    retp(b_i, e_i, inverse_x_x, sig_i, sig2_i, se, r2_i);
 endp;
+
 
 proc (1) = __getylag(y, starttvec, endtvec, datevec, isbalanced, n);
     local indx1, indx2, tivec, y_wide, y_l, t;
-    
-    
-    
+
     // Reshape data for lagging
     if isbalanced;
-        t = rows(y)/n;
+        t      = rows(y)/n;
         y_wide = reshape(y, n, t)';
-        y_l = lagn(y_wide, 1);
-        y_l = vec(y_l);
-        
+        y_l    = lagn(y_wide, 1);
+        y_l    = vec(y_l);
     else;
         y_l = zeros(rows(y), 1);
 
@@ -136,14 +146,14 @@ proc (1) = __getylag(y, starttvec, endtvec, datevec, isbalanced, n);
             y_l[tivec[i]+1:tivec[i+1], .] = lagn(y[tivec[i]+1:tivec[i+1], .], 1);
         endfor;
     endif;
-    
+
     retp(y_l);
 endp;
-    
-    
+
+
 proc (3) = __getdlags(ybar, xbar, crlags);
     local PT, ybarlags, xbarlags, vars, lags, varnames;
-    
+
     // Find lag length
     if crlags;
         PT = crlags;
@@ -151,144 +161,140 @@ proc (3) = __getdlags(ybar, xbar, crlags);
         PT = __getPT(rows(ybar));
     endif;
     lags = seqa(1, 1, PT);
-    
+
     // Get ybar lags
     ybarlags = lagn(ybar, lags);
     varnames = getcolnames(ybar) $+ "_l_" $+ itos(lags);
     ybarlags = setcolnames(ybarlags, varnames, lags);
-    
+
     // Get xbar storage matrices
     xbarlags = asDF(zeros(rows(ybar), cols(xbar)*PT));
-    
+
     // Number of variables in xbar
     vars = cols(xbar);
-    
+
     // Lag each x var
     for i(1, vars, 1);
         local indx;
-        
+
         indx = seqa((i-1)*PT+1, 1, PT);
-        
+
         xbarlags[., (i-1)*PT+1:i*PT] = lagn(xbar[., i], lags);
-        
+
         varnames = getcolnames(xbar[., i]) $+ "_l_" $+ itos(lags);
         xbarlags = setColNames(xbarlags, varnames, indx);
-        
     endfor;
-    
+
     retp(ybarlags, xbarlags, PT);
-    
 endp;
+
 
 proc (7) = _getDataMats(data, x_common, data_bar, no_xbar, ylag);
     local y, x, t, data_d, ybar, xbar_tmp, xbar, xbarname, ybarname, nb_no_xbar;
-    
-    
+
     // Get x and y
     y = data[., 3];
     x = data[., 4:cols(data)];
-    
-    // Add lagged y to dependent variables
+
+    // Add lagged y to regressors
     if ylag != 0;
         x = ylag~x;
         x = setcolnames(x, getcolnames(y)$+"_l", 1);
     endif;
-    
+
     t = rows(unique(data[., 2]));
-    
+
     if not (data_bar == miss());
         // Get separate means
         ybar = data_bar[. , 3];
         ybarname = getcolnames(ybar) $+ "bar";
         ybar = setcolnames(ybar, ybarname);
-        
+
         // Choose xbar
         nb_no_xbar = cols(no_xbar);
-        xbar_tmp = data_bar[., 4:cols(data_bar)]; // Don't get x bar until we drop xs
-        
+        xbar_tmp = data_bar[., 4:cols(data_bar)];
+
         // Remove excluded x's
         xbar = __delXBars(xbar_tmp, no_xbar');
         xbarname = getcolnames(xbar) $+ "bar";
         xbar = setcolnames(xbar, xbarname);
     else;
-        ybar = miss();
-        xbar = miss();
+        ybar     = miss();
+        xbar     = miss();
         ybarname = "";
         xbarname = "";
     endif;
-    
+
     // Get common data
     data_d = __getDMat(x_common, t);
 
     retp(y, x, data_d, ybar, xbar, ybarname, xbarname);
 endp;
 
+
 proc(1) = __getDMat(x_common, N);
-    
-    // Choose z
+
     if x_common == 0;
         retp(asDF(ones(N,1)));
     else;
         retp(x_common~asDF(ones(N,1)));
     endif;
-    
 endp;
+
 
 proc(2) = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, bigT, ...);
     local h_i, hname, h, ybar_l, xbar_l, PT;
-    
+
     { ybar_l, xbar_l, PT } = dynargsGet(1|3, miss(), miss(), 0);
-    
-    // Form h = (z, ybar, xbar) */
+
+    // Form h = (z, ybar, xbar, ybar_lags, xbar_lags)
     h_i = data_d;
-    
+
     if not (ybar == miss);
         h_i = h_i~ybar;
     endif;
-    
+
     if not (xbar == miss);
         h_i = h_i~xbar;
     endif;
-    
+
     if not (ybar_l == miss());
         h_i = h_i~ybar_l;
     endif;
-    
+
     if not (xbar_l == miss());
-        //if xbar_l != miss();
         h_i = h_i~xbar_l;
     endif;
-    
+
     hname = getcolnames(h_i)';
-    
-    // Reshape h
+
+    // Reshape h to panel format
     h = __reshapeH(h_i, starttvec, endtvec, datevec, bigT);
-    
+
     retp(h, hname);
-    
 endp;
 
 
 proc (5) = __getnames(data, x_common, x_csa, ylag);
-    
+
     local varnames, groupvar, timevar, yname, xnames, dname;
     if hasmetadata(data);
         varnames = getcolnames(data);
         groupvar = varnames[1];
-        timevar = varnames[2];
-        yname = varnames[3];
-        xnames = varnames[4:cols(data)];
+        timevar  = varnames[2];
+        yname    = varnames[3];
+        xnames   = varnames[4:cols(data)];
     else;
         groupvar = "i";
-        timevar = "j";
-        yname = "y";
-        xnames = "x" $+ itos(seqa(1, 1, cols(data)-3));
+        timevar  = "j";
+        yname    = "y";
+        xnames   = "x" $+ itos(seqa(1, 1, cols(data)-3));
     endif;
-    
+
     if ylag;
         xnames = "y_l"$|xnames;
     endif;
-    
+
     if x_csa != 0;
         if hasmetadata(x_csa);
             xnames = xnames$|getColnames(x_csa);
@@ -297,66 +303,67 @@ proc (5) = __getnames(data, x_common, x_csa, ylag);
             tmp = "x_csa" $+ itos(seqa(1, 1, cols(x_csa)));
         endif;
     endif;
-    
-    // Get x common names
+
+    // Get x_common names
     dname = "inpt";
-    if x_common /=0 and hasmetadata(x_common);
+    if x_common /= 0 and hasmetadata(x_common);
         dname = getColNames(x_common)$~dname;
-    elseif x_common /=0;
+    elseif x_common /= 0;
         dname = "d" $+ itos(seqa(1, 1, cols(x_common)))$~dname;
     endif;
-    
+
     retp(yname, xnames, groupvar, timevar, dname);
-    
 endp;
+
 
 proc (10) = _getTimeInfo(data, groupvar, timevar, ...);
     local PT, idvec, tvec, t_n, starttvec, endtvec, miny, maxy, mint, maxt, datevec;
-    
+
     PT = dynargsGet(1, 0);
-    
+
     // Time vector and ID vector
-    idvec = unique(data[., groupvar]);
+    idvec   = unique(data[., groupvar]);
     datevec = unique(data[., timevar]);
-    tvec = counts(data[., groupvar],  idvec);
-    
+    tvec    = counts(data[., groupvar], idvec);
+
     // Count length by variable
     t_n = counts(data[., timevar], unique(data[., timevar]));
-    
+
     // Start and end time vec
     starttvec = aggregate(data[., groupvar timevar], "min", groupvar);
     starttvec = starttvec[., 2];
-    endtvec = aggregate(data[., groupvar timevar], "max", groupvar);
-    endtvec = endtvec[.,2];
-    
+    endtvec   = aggregate(data[., groupvar timevar], "max", groupvar);
+    endtvec   = endtvec[.,2];
+
     // Min and max
     miny = asDate(posixtostrc(minc(starttvec), "%Y"), "%Y");
     maxy = asDate(posixtostrc(maxc(endtvec), "%Y"), "%Y");
     mint = minc(tvec);
     maxt = maxc(tvec);
-    
-    // Adjustments for PT
+
+    // Adjustments for PT (lag trimming)
     if PT;
         local cumtivec, start_i;
         cumtivec = 0|cumsumc(tvec);
-        start_i = cumtivec + PT + 1;
-        start_i = start_i[1:rows(start_i)-1];
-        
+        start_i  = cumtivec + PT + 1;
+        start_i  = start_i[1:rows(start_i)-1];
+
         starttvec = data[start_i, timevar];
-        miny = minc(starttvec);
-        
+        miny      = minc(starttvec);
+
         tvec = tvec - PT;
     endif;
-    
+
     retp(idvec, tvec, t_n, starttvec, endtvec, miny, maxy, mint, maxt, datevec);
 endp;
 
+
 proc (1) = __delXBars(xbar, no_xbar);
-    
+
     if type(no_xbar) == 6 and no_xbar /= 0;
         no_xbar = no_xbar - 3;
     endif;
-    
+
     if not no_xbar;
         retp(xbar);
     else;
@@ -364,40 +371,40 @@ proc (1) = __delXBars(xbar, no_xbar);
     endif;
 endp;
 
+
 proc(1) = __reshapeH(h_i, starttvec, endtvec, datevec, bigT);
     local tivec, indx1, indx2, h, i;
-    
+
     // Index vector
     indx1 = indnv(starttvec, datevec);
     indx2 = indnv(endtvec, datevec);
-    
+
     // Get tivec
     tivec = 0|cumsumc((indx2-indx1+1));
-    
+
     // Allocate storage
     h = zeros(bigT, cols(h_i));
     i = 1;
-    
+
     do while i <= rows(indx1);
         h[tivec[i]+1:tivec[i+1], .] = h_i[indx1[i]:indx2[i], .];
         i = i + 1;
     endo;
-    
+
     retp(h);
-    
 endp;
+
 
 proc (1) = __getPT(T);
     retp(int(T^(1/3)));
 endp;
 
+
 proc (1) = __pdbalanced(grp);
-    local num_grps, T, _isbalanced;
-    
-    num_grps = rows(unique(grp));
+    local T, _isbalanced;
+
     T = unique(counts(grp, unique(grp)));
-    
-    _isbalanced = rows(t) == 1;
-    
-    retp( _isbalanced);
+    _isbalanced = rows(T) == 1;
+
+    retp(_isbalanced);
 endp;

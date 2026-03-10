@@ -1,0 +1,208 @@
+/*
+**> cips
+**
+**  Pesaran (2007) Panel Unit Root Test — CIPS (Cross-sectionally Augmented IPS).
+**
+**  Reference:
+**    PESARAN, M.H. (2007), A SIMPLE PANEL UNIT ROOT TEST IN THE PRESENCE OF
+**    CROSS-SECTION DEPENDENCE, JOURNAL OF APPLIED ECONOMETRICS, 22(2), 265-312.
+**
+**  Tests H₀: each series has a unit root (panel unit root).
+**  The CADF(p) regression for group i is:
+**
+**    Δyᵢₜ = αᵢ + βᵢ yᵢ,ₜ₋₁ + c₀ ȳₜ₋₁ + Σⱼ₌₀ᵖ dⱼ Δȳₜ₋ⱼ + Σⱼ₌₁ᵖ fⱼ Δyᵢ,ₜ₋ⱼ + uᵢₜ
+**
+**  where ȳₜ = cross-sectional mean of y at time t.
+**  The CADF_i = t-ratio on β̂ᵢ.
+**  CIPS = (1/N) Σᵢ CADF_i.
+**
+**  Inference: Compare CIPS to critical values in Pesaran (2007) Table 2.
+**             Approximate p-values (for reference only) use standard normal.
+**
+**  Format:  { cips_stat, cadf_vec } = cips(data, ...)
+**
+**  Input:   data      Panel dataframe. Columns: [id, time, y].
+**                     Only the first three columns are used.
+**
+**  Optional keyword arguments (pass as mgControl-style, or via ...):
+**           p         Number of lags. Default: determined by __getPT(T).
+**           demean    1 = include individual intercept (default).
+**                     2 = include intercept + trend.
+**
+**  Output:  cips_stat   Scalar CIPS statistic.
+**           cadf_vec    N×1 vector of per-group CADF_i statistics.
+**
+**  Usage:   { cips, cadf } = cips(data);
+**           { cips, cadf } = cips(data, p, demean);
+*/
+proc (2) = cips(data, ...);
+
+    local p, demean;
+    { p, demean } = dynargsGet(1|2, 0, 1);
+
+    local groupvar, timevar, yname, idvec, datevec, tvec, n, T;
+    local cumtivec, i, y_full, ybar_full;
+    local cips_stat, cadf_vec;
+
+    groupvar = getcolnames(data)[1];
+    timevar  = getcolnames(data)[2];
+    yname    = getcolnames(data)[3];
+
+    idvec   = unique(data[., groupvar]);
+    datevec = unique(data[., timevar]);
+    tvec    = counts(data[., groupvar], idvec);
+    n       = rows(idvec);
+    T       = rows(datevec);
+
+    if p == 0;
+        p = __getPT(T);
+    endif;
+
+    // Extract the y series (stacked NT×1)
+    y_full = data[., 3];
+
+    // Cross-sectional mean at each time point: T×1 vector
+    ybar_full = aggregate(data[., groupvar timevar], "mean", timevar);
+    ybar_full = ybar_full[., 2];   // T×1 ordered by time
+
+    // First difference of ybar: T×1 (first obs = missing/0)
+    local dybar_full;
+    dybar_full = ybar_full - lagn(ybar_full, 1);   // T×1; first row is missing
+
+    cumtivec = 0|cumsumc(tvec);
+    cadf_vec = zeros(n, 1);
+
+    for i(1, n, 1);
+
+        local r1, r2, y_i, T_i, t_start, t_end;
+        r1    = cumtivec[i]+1;
+        r2    = cumtivec[i+1];
+        T_i   = tvec[i];
+        y_i   = y_full[r1:r2];
+
+        // Find where this group sits in the common time vector
+        // (for balanced panels all groups span the full T)
+        local t_s_idx;
+        t_s_idx = indnv(aggregate(data[r1:r2, groupvar timevar], "min", groupvar)[., 2], datevec);
+        t_start = t_s_idx[1];          // 1-based index in datevec for group i's first obs
+        t_end   = t_start + T_i - 1;
+
+        // Extract ybar and dybar aligned with group i's time span
+        local ybar_i, dybar_i;
+        ybar_i  = ybar_full[t_start:t_end];
+        dybar_i = dybar_full[t_start:t_end];
+
+        // Build CADF(p) regression:
+        //   LHS: Δyᵢₜ
+        //   RHS: intercept [+ trend], yᵢ,ₜ₋₁, ȳₜ₋₁, Δȳₜ, Δȳₜ₋₁, ..., Δȳₜ₋ₚ,
+        //        Δyᵢₜ₋₁, ..., Δyᵢₜ₋ₚ
+
+        // Differences
+        local dy_i;
+        dy_i = y_i - lagn(y_i, 1);   // T_i×1, first = missing
+
+        // Trim: we need p+1 presample obs (1 for dy, p for lags of dy and dybar)
+        // Effective start: row p+2 (1-indexed within group)
+        local trim;
+        trim = p + 2;
+        if trim >= T_i;
+            // Too few obs for this group — skip (set cadf to missing)
+            cadf_vec[i] = miss();
+            continue;
+        endif;
+
+        local lhs, rhs, T_eff;
+        T_eff = T_i - trim + 1;   // effective observations
+
+        lhs = dy_i[trim:T_i];
+
+        // Intercept
+        rhs = ones(T_eff, 1);
+
+        // Optional trend
+        if demean == 2;
+            rhs = rhs ~ seqa(trim, 1, T_eff);
+        endif;
+
+        // Lagged level: yᵢ,ₜ₋₁
+        rhs = rhs ~ y_i[trim-1:T_i-1];
+
+        // Lagged cross-sectional mean: ȳₜ₋₁
+        rhs = rhs ~ ybar_i[trim-1:T_i-1];
+
+        // Contemporaneous and lagged Δȳ: Δȳₜ, Δȳₜ₋₁, ..., Δȳₜ₋ₚ
+        local j;
+        for j(0, p, 1);
+            rhs = rhs ~ dybar_i[trim-j:T_i-j];
+        endfor;
+
+        // Lagged Δyᵢ: Δyᵢ,ₜ₋₁, ..., Δyᵢ,ₜ₋ₚ
+        for j(1, p, 1);
+            rhs = rhs ~ dy_i[trim-j:T_i-j];
+        endfor;
+
+        // OLS
+        local xx_inv, b, e, sig2, se_b, k_cadf;
+        k_cadf = cols(rhs);
+        xx_inv = pinv(rhs'rhs);
+        b      = xx_inv * (rhs'lhs);
+        e      = lhs - rhs*b;
+        sig2   = e'e / (T_eff - k_cadf);
+        se_b   = sqrt(diag(sig2 * xx_inv));
+
+        // CADF_i = t-ratio on β̂ᵢ (coefficient on yᵢ,ₜ₋₁, which is column 3 or 4)
+        // Column index: 1=const, [2=trend if demean=2], then y_{i,t-1}
+        local beta_col;
+        if demean == 2;
+            beta_col = 3;
+        else;
+            beta_col = 2;
+        endif;
+        cadf_vec[i] = b[beta_col] / se_b[beta_col];
+
+    endfor;
+
+    // CIPS = mean of CADF_i (drop missing)
+    cips_stat = meanc(packr(cadf_vec));
+
+    retp(cips_stat, cadf_vec);
+endp;
+
+
+/*
+** print_cips
+**
+** Prints a formatted summary of cips() results.
+**
+** Format:  print_cips(cips_stat, cadf_vec, p, demean)
+*/
+proc (0) = print_cips(cips_stat, cadf_vec, p, demean);
+    local wid, n_valid;
+    wid     = 60;
+    n_valid = rows(packr(cadf_vec));
+
+    print chrs(61*ones(wid, 1));
+    print "CIPS Panel Unit Root Test (Pesaran, 2007)";
+    print "H0: Panel unit root (all series are I(1))";
+    print chrs(61*ones(wid, 1));
+    sprintf("  %-30s %d", "Number of groups:", rows(cadf_vec));
+    sprintf("  %-30s %d", "Groups used:", n_valid);
+    sprintf("  %-30s %d", "Lag order (p):", p);
+
+    if demean == 2;
+        sprintf("  %-30s %s", "Deterministics:", "Intercept + Trend");
+    else;
+        sprintf("  %-30s %s", "Deterministics:", "Intercept only");
+    endif;
+
+    print chrs(45*ones(wid, 1));
+    sprintf("  %-30s %10.4f", "CIPS statistic:", cips_stat);
+    print chrs(45*ones(wid, 1));
+    print "  Note: Compare CIPS to critical values in";
+    print "  Pesaran (2007) Table 2 (function of N, T, p).";
+    print "  Approximate 5% critical values (p=1):";
+    print "    Intercept only:     -2.11";
+    print "    Intercept + Trend:  -2.62";
+    print chrs(61*ones(wid, 1));
+    print "";
+endp;

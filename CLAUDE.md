@@ -6,14 +6,12 @@
 
 > Pesaran, M.H. (2006), "Estimation and Inference in Large Heterogeneous Panels with a Multifactor Error Structure," *Econometrica*, Vol. 74, No. 4, pp. 967–1012.
 
-The library provides three main estimators:
-- **MG** — Mean Group Estimator
-- **CCE-MG** — Common Correlated Effects Mean Group Estimator
-- **DCCE-MG** — Dynamic Common Correlated Effects Mean Group Estimator
+The library provides three main estimators plus companion diagnostic and inference tools.
 
 **Author:** Eric Clower, Aptech Systems, Inc. (`eric@aptech.com`)
 **Target:** GAUSS 23+
 **License:** Non-commercial public use only
+**Package version:** 0.2.0
 
 ---
 
@@ -23,19 +21,27 @@ The library provides three main estimators:
 pddcce/
 ├── CLAUDE.md               # This file
 ├── README.md               # User-facing overview
-├── package.json            # GAUSS package manifest (name: dccelib, version: 0.1.0)
-├── ccep.src                # Legacy pooled CCE code (older style, not in package.json src list)
+├── package.json            # GAUSS package manifest (name: dccelib, version: 0.2.0)
 ├── src/
 │   ├── cce.sdf             # Structure definitions (mgControl, mgOut, cdOut, pcceNWOut)
-│   ├── cce_mg.src          # Main estimator procedures
-│   └── dcceutil.src        # Utility/helper procedures and output formatting
-└── examples/
-    ├── mg_penn.e           # MG estimator example (Penn World Tables data)
-    ├── cce_penn.e          # CCE-MG estimator example
-    ├── dcce_penn.e         # DCCE-MG estimator example
-    ├── cce_proc.e          # Older-style example using direct #include
-    ├── penn_sample.dta     # Penn World Tables sample data (Stata format)
-    └── jasa2.dta           # Additional dataset
+│   ├── cce_mg.src          # MG, CCE-MG, DCCE-MG estimators + pcceNW + cdtest
+│   ├── dcceutil.src        # Utility procedures, printing, coeftable()
+│   ├── slopehomo.src       # Pesaran-Yamagata (2008) slope homogeneity tests
+│   ├── cips.src            # Pesaran (2007) CIPS panel unit root test
+│   ├── latex_export.src    # LaTeX table export (single and multi-model)
+│   └── bootstrap.src       # Wild bootstrap standard errors for MG estimators
+├── examples/
+│   ├── mg_penn.e           # MG estimator example (Penn World Tables)
+│   ├── cce_penn.e          # CCE-MG example
+│   ├── dcce_penn.e         # DCCE-MG example
+│   ├── cce_proc.e          # Combined MG/CCE-MG/DCCE-MG example
+│   ├── penn_sample.dta     # Penn World Tables sample data (Stata format)
+│   └── jasa2.dta           # Additional dataset
+└── validation/
+    ├── validate_dcce.R     # R plm::pmg() reference values
+    ├── validate_gauss.e    # GAUSS batch validation script
+    ├── inspect_data.R      # Data inspection utility
+    └── gauss_results.txt   # Output from validate_gauss.e (gitignored)
 ```
 
 ---
@@ -46,85 +52,101 @@ For writing and reviewing GAUSS code, use the LLM reference at:
 **https://github.com/aptech/gauss-llm-reference**
 
 Key GAUSS conventions used in this codebase:
-- Procedures use `proc(N) = name(args);` ... `retp(...);` ... `endp;`
+- Procedures: `proc(N) = name(args);` ... `retp(...);` ... `endp;`
 - Structs declared in `.sdf` files, instantiated with `struct TypeName varname;`
-- Optional args via `dynargsGet(index, default)`
+- Optional args via `dynargsGet(index, default)` or `dynargsGet(1|3, d1, d2, d3)`
 - `do while` / `endo` loops; `for i(start, end, step)` / `endfor`
-- String arrays use `$~` (horizontal concat) and `$|` (vertical concat)
-- Element-wise operations: `.*`, `./`, `.^`, `.==`, etc.
-- `pinv()` for pseudoinverse, `invpd()` for positive-definite inverse, `inv()` for general inverse
-- `packr()` removes rows with missing values
-- `asDF()` converts matrix to dataframe; `setcolnames()` / `getcolnames()` manage column metadata
-- `aggregate()` for group-level aggregation; `unique()` for unique values
-- `indnv()` finds index of elements; `counts()` counts occurrences
+- String arrays: `$~` horizontal concat, `$|` vertical concat
+- Element-wise ops: `.*`, `./`, `.^`, `.==`, `.!=`
+- `pinv()` pseudoinverse; `invpd()` positive-definite inverse
+- `packr()` removes rows with missing values; `miss(x, 0)` replaces 0 with missing
+- `asDF()` converts matrix to dataframe; `setcolnames()` / `getcolnames()`
+- `aggregate()` for group aggregation; `unique()` / `counts()` / `indnv()`
+- `#include` resolves relative to CWD, not to the including file's directory
+- Forward slashes required in paths (backslash sequences `\e`, `\p`, etc. are escape codes)
+- `sprintf(fmt, ...)` as a bare statement prints to stdout in GAUSS 26
 
 ---
 
 ## Data Structures (`src/cce.sdf`)
 
 ### `mgControl` — Input control structure
-| Member | Type | Default | Description |
-|--------|------|---------|-------------|
-| `zero_x` | matrix | 0 | Column identifier for vars with zeros (normalization) |
-| `zero_id` | matrix | 0 | Group identifier for normalized groups |
-| `y_lags` | matrix | 0 | Include lagged y (1 = yes) |
-| `cr_lags` | matrix | 0 | Number of CSA lags (0 = auto) |
-| `no_xbar` | matrix | 0 | Column IDs to exclude from cross-sectional averages |
-| `x_common` | matrix | 0 | Common regressors (not group-specific) |
-| `x_csa` | matrix | 0 | Extra vars for CSA not in main regression |
-| `report` | matrix | 1 | Print output (1 = yes) |
+| Member | Default | Description |
+|--------|---------|-------------|
+| `zero_x` | 0 | Column ID for vars with zeros (normalization) |
+| `zero_id` | 0 | Group ID for normalized groups |
+| `y_lags` | 0 | 1 = include lagged y as regressor |
+| `cr_lags` | 0 | CSA lag order (0 = auto via `__getPT`) |
+| `no_xbar` | 0 | Columns to exclude from CSA |
+| `x_common` | 0 | Common (non-group-specific) regressors |
+| `x_csa` | 0 | Extra vars for CSA not in main regression |
+| `report` | 1 | 1 = print results table automatically |
+| `pooled` | 0 | 1 = also run pooled CCE (`pcceNW`) |
 
 ### `mgOut` — Results output structure
-Key members: `b_mg`, `se_mg`, `tvalue`, `pval`, `cov_mg`, `e_mg`, `b_vec`, `se_nw`, `nobs`, `ngroups`, `obs_grp`, `k_reg`, `df`, `df_csa`, `csa_lags`, `cd_stat`, `cd_pval`, `out_mg`, `panel_var`, `time_var`, `y_varname`, `mg_vars`, `csa_vars`, `model`
+| Member | Description |
+|--------|-------------|
+| `b_mg` | k×1 MG coefficient estimates |
+| `se_mg` | k×1 NP standard errors (Pesaran 2006 eq.58) |
+| `tvalue` | k×1 t-values |
+| `pval` | k×1 p-values |
+| `ci` | k×2 95% CI [lb, ub] |
+| `R_sq` | Mean within-group R² |
+| `b_stats` | k×4 heterogeneity: [min, mean, max, sd] of b_i across groups |
+| `cov_mg` | k×k NP covariance matrix |
+| `e_mg` | Stacked pooled residuals |
+| `b_vec` | n×k individual group estimates |
+| `xxi_vec` | n×k² per-group X'X (row-vectorised); used by `slopehomo` |
+| `sig_vec` | n×1 per-group residual SDs |
+| `se_nw` | n×k per-group Newey-West SEs |
+| `cd_stat`, `cd_pval` | Pesaran (2004) CD test |
+| `out_mg` | Formatted output dataframe |
+| `pcce` | `pcceNWOut` struct (populated if `mgCtl.pooled=1`) |
+| `panel_var`, `time_var`, `y_varname`, `model`, `mg_vars`, `csa_vars` | Model metadata |
+| `nobs`, `ngroups`, `obs_grp`, `k_reg`, `df`, `df_csa`, `csa_lags` | Dimensions |
 
 ### `pcceNWOut` — Pooled CCE results
-Members: `b_pcce`, `cov_pcce`, `sig2_pcce`, `e_pcce`, `se_pcce`, `tvalue_pcce`, `out_pcce`, `ci_vec`, `sig_i_vec`, `cov_pcce_rbst_nw`, `cov_pcce_hs2`
+`b_pcce`, `se_pcce`, `tvalue_pcce`, `out_pcce`, `cov_pcce_rbst_nw`, `cov_pcce_hs2`
 
 ---
 
-## Main Public Procedures (`src/cce_mg.src`)
+## Main Public Procedures
 
-### `dcce_mg(data, [mgCtl])` → `mgOut`
-Dynamic CCE-MG estimator. Includes lagged y and CSA lags. Sets `model = "Dynamic Common Correlated Effects Estimator"`.
+### Core estimators (`src/cce_mg.src`)
 
-### `mg(data, [mgCtl])` → `mgOut`
-Plain Mean Group estimator. No cross-sectional averages.
+| Procedure | Description |
+|-----------|-------------|
+| `mg(data, [mgCtl])` | Mean Group estimator |
+| `cce_mg(data, [mgCtl])` | CCE Mean Group estimator |
+| `dcce_mg(data, [mgCtl])` | Dynamic CCE-MG (y lags + CSA lags) |
+| `pcceNW(varname, y, x, h, n, tivec, b_vec, [PT])` | Pooled CCE with NW SE |
+| `cdtest(e, n, tivec, starttvec, endtvec)` | Pesaran (2004) CD test |
+| `getCSA(data, groupvar, timevar, [x_csa])` | Compute cross-sectional averages |
 
-### `cce_mg(data, [mgCtl])` → `mgOut`
-CCE Mean Group estimator. Includes cross-sectional averages in the regression.
-> **Bug:** Currently sets `model = "Mean Group Estimator"` — should be `"Common Correlated Effects Mean Group Estimator"`.
+### Utility (`src/dcceutil.src`)
 
-### `getCSA(data, groupvar, timevar, [x_csa])` → `data_bar`
-Computes cross-sectional averages using `aggregate(..., "mean", timevar)`.
+| Procedure | Description |
+|-----------|-------------|
+| `mgControlCreate()` | Create default `mgControl` struct |
+| `coeftable(mgO)` | Return k×4 numeric matrix [coef, se, t, p] |
+| `__print_mg_output(mgO)` | Print formatted results table |
 
-### `pcceNW(varname_cce, y, x, h, n, tivec, starttvec, endtvec, years, b_vec_mg)` → `pcceNWOut`
-Pooled CCE estimator with Newey-West standard errors. Older interface — not currently wired into the main workflow.
+### Diagnostics & tests (`src/slopehomo.src`, `src/cips.src`)
 
-### `cdtest(e, n, tivec, starttvec, endtvec)` → `{cd_nt, pvalue_cd_nt, meanrho, used}`
-Pesaran (2004) CD test for cross-sectional dependence.
+| Procedure | Description |
+|-----------|-------------|
+| `slopehomo(mgO)` | Pesaran-Yamagata (2008) Δ and Δ_adj slope homogeneity tests |
+| `print_slopehomo(delta, pval, delta_adj, pval_adj)` | Print slope homogeneity results |
+| `cips(data, [p, demean])` | Pesaran (2007) CIPS panel unit root test |
+| `print_cips(cips_stat, cadf_vec, p, demean)` | Print CIPS results |
 
----
+### Export & inference (`src/latex_export.src`, `src/bootstrap.src`)
 
-## Internal/Private Procedures (`src/dcceutil.src`)
-
-| Procedure | Outputs | Description |
-|-----------|---------|-------------|
-| `mgControlCreate()` | `mgControl` | Creates default control structure |
-| `_mg(yname, xname, y, x, n, tivec, zero_x, zero_id, [PT])` | `mgOut` | Core group-by-group OLS loop |
-| `__olsIndividual(y_i, x_i, t_i, k, zero_id)` | 6 values | OLS for one group |
-| `_getTimeInfo(data, groupvar, timevar, [PT])` | 10 values | Extract time/ID index vectors |
-| `_getDataMats(data, x_common, data_bar, no_xbar, ylag)` | 7 values | Build y, x, ybar, xbar matrices |
-| `__getHMat(data_d, ybar, xbar, ...)` | `{h, hname}` | Build H matrix (z, ybar, xbar, lags) |
-| `__getdlags(ybar, xbar, crlags)` | `{ybarlags, xbarlags, PT}` | Generate CSA lag matrices |
-| `__getylag(y, starttvec, endtvec, datevec, isbalanced, n)` | `y_l` | Lag dependent variable |
-| `__getPT(T)` | scalar | Auto lag length: `int(T^(1/3))` |
-| `__reshapeH(h_i, starttvec, endtvec, datevec, bigT)` | `h` | Align H matrix to panel structure |
-| `__getnames(data, x_common, x_csa, ylag)` | 5 strings | Extract variable names |
-| `__delXBars(xbar, no_xbar)` | `xbar` | Remove excluded vars from CSA |
-| `__pdbalanced(grp)` | scalar | Check if panel is balanced |
-| `__print_mg_output(mgO)` | — | Print full results table |
-| `__print_mg_header(mgO)` | — | Print model header block |
-| `__print_mg_footer(mgO)` | — | Print CD test and variable lists |
+| Procedure | Description |
+|-----------|-------------|
+| `mgOutToLatex(mgO, filename, [se_type, note])` | Export single model to .tex |
+| `mgOutToLatexMulti(mgO_arr, labels, filename, [note])` | Export 2–6 models side-by-side |
+| `mgBootstrap(data, mgCtl, [B, estimator_type])` | Wild bootstrap SEs (Rademacher weights) |
 
 ---
 
@@ -136,65 +158,49 @@ All estimator procedures expect `data` in this column order:
 3. **Dependent variable (y)** — column 3
 4. **Independent variables (x)** — columns 4+
 
-Data must be sorted by group, then time. Use `packr()` to remove missing rows before calling estimators.
+Sort by group then time. Use `packr()` to remove missing rows before calling.
 
 ---
 
-## Bugs / Issues
+## Bug History (Resolved)
 
-### Remaining legacy issue
-- **`ccep.src`** — stale file returning 11 values (old style); doc header incorrectly describes an ADF test; not in `package.json` src list. Do not use.
+All previously identified bugs are fixed. Summary:
 
-### Fixed — Phase 1 (bug fixes)
-
-| File | Item | Fix applied |
-|------|------|-------------|
-| `dcceutil.src` `__getPT` | `T^1/3` → `T^(1/3)` | Was computing T/3 not cube root due to operator precedence |
-| `dcceutil.src` `_getTimeInfo` | `+ 3 +` → `+ PT +` | Hardcoded lag offset instead of using variable |
-| `dcceutil.src` `_getTimeInfo` | `"year"` → `timevar` | Hardcoded column name broke non-year time variables |
-| `dcceutil.src` `__getylag` | `for i(1, 1, rows)` → `for i(1, rows, 1)`; `tivec[i]` → `tivec[i]+1` | Loop ran once only; 0-based index invalid in GAUSS |
-| `cce_mg.src` `cce_mg` | Model label | Corrected to `"Common Correlated Effects Mean Group Estimator"` |
-| `examples/mg_penn.e` | Path | `"examples/..."` → `__FILE_DIR $+ "..."` |
-| `examples/cce_proc.e` | API | Rewrote to use `mgControl` struct; uses Penn data |
-
-### Fixed — Phase 2 (efficiency) + validation bugs
-
-| File | Change |
-|------|--------|
-| `dcceutil.src` `__olsIndividual` | Compute `pinv(X'X)` once, reuse for `b` and `se` (was computed twice) |
-| `cce_mg.src` `pcceNW` | 3 loops → 2; pre-allocated `e_pcce`; fixed `Tivec` case bug; fixed `cov_pcce_rbst_nw` self-assignment; compute `pinv(mx_mx)` once and reuse |
-| `cce_mg.src` `cdtest` | Removed bare debug expressions `cumtivec[j]+1;` and `cumtivec[j+1];` that printed N×(N-1)/2 lines of noise (4,278 lines for N=93) |
-
-### Validation status
-All coefficients verified against R `plm::pmg()` to 6 decimal places:
-- MG: ✅ log_ck=0.305300, log_ngd=0.279783, inpt=5.391778
-- CCE-MG: ✅ log_ck=0.316743, log_ngd=0.089055, inpt=1.145539
-- DCCE-MG: ✅ y_l=0.456422, log_ck=0.153173, log_ngd=0.009159
+| File | Bug | Fix |
+|------|-----|-----|
+| `dcceutil.src` `__getPT` | `T^1/3` was T/3 (precedence) | `T^(1/3)` |
+| `dcceutil.src` `_getTimeInfo` | Hardcoded `+3+` lag offset | Use `+PT+` |
+| `dcceutil.src` `_getTimeInfo` | Hardcoded `"year"` column | Use `timevar` |
+| `dcceutil.src` `__getylag` | Loop `for i(1,1,rows)` ran once | `for i(1,rows,1)` |
+| `dcceutil.src` `__getylag` | `tivec[i]:tivec[i+1]` off-by-one | `tivec[i]+1:tivec[i+1]` |
+| `dcceutil.src` `__pdbalanced` | `rows(t)==1` lowercase `t` undefined | `rows(T)==1` |
+| `cce_mg.src` `cdtest` | Bare debug expressions printed 4278 lines | Removed |
+| `cce_mg.src` `pcceNW` | Self-assignment `cov=cov`; 3 loops | Fixed; reduced to 2 loops |
+| `cce_mg.src` `cce_mg` | Wrong model label "Mean Group" | "Common Correlated Effects..." |
+| Paths in `.e` files | Backslash escape sequences | Forward slashes everywhere |
 
 ---
 
-## Objectives / Development Roadmap
+## Validation
 
-1. **Accuracy & efficiency**: ✅ Phase 1 bugs fixed. ✅ Phase 2 efficiency applied. ✅ Validated against R `plm::pmg()` to 6 decimal places.
-2. **Examples**: ✅ All `.e` files updated to current API. Next: add output commentary.
-3. **pcceNW integration**: Wire pooled CCE estimator into `cce_mg`/`dcce_mg` workflow. Currently a standalone proc, not called from main estimators.
-4. **Documentation**: Produce formatted documentation compatible with GAUSS package standards.
-5. **Library expansion**: See expansion roadmap (TBD).
+All three estimators verified against R `plm::pmg()` to 6 decimal places:
+- **MG:** log_ck=0.305300, log_ngd=0.279783, inpt=5.391778 ✅
+- **CCE-MG:** log_ck=0.316743, log_ngd=0.089055, inpt=1.145539 ✅
+- **DCCE-MG:** y_l=0.456422, log_ck=0.153173, log_ngd=0.009159 ✅
 
-## Validation Scripts
-- `validation/validate_dcce.R` — R `plm::pmg()` reference values (run with Rscript.exe)
-- `src/validate_gauss.e` — GAUSS batch validation (run: `cd src && C:\gauss26\tgauss.exe -b -nj validate_gauss.e`)
+Run validation:
+```
+# R
+"C:/Program Files/R/R-4.5.0/bin/Rscript.exe" validation/validate_dcce.R
+
+# GAUSS (from repo root)
+C:\gauss26\tgauss.exe -b -nj validation\validate_gauss.e
+```
 
 ---
 
 ## Penn World Tables Example Data (`examples/penn_sample.dta`)
 
-Variables used:
-- `id` — country identifier (panel group variable)
-- `year` — year (time variable, loaded as date with `date($year, '%Y')`)
-- `log_rgdpo` — log real GDP per output
-- `log_hc` — log human capital index
-- `log_ck` — log physical capital stock
-- `log_ngd` — log population growth + break-even investment (5%)
+Key variables: `id` (country), `year`, `log_rgdpo`, `log_ck`, `log_ngd`, `log_hc`
 
-Typical model structure: `log_rgdpo ~ log_ck + log_ngd` with `log_hc` used in CSA.
+Typical model: `log_rgdpo ~ log_ck + log_ngd`, with `log_hc` as extra CSA variable.

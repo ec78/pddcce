@@ -1,0 +1,110 @@
+#include cce.sdf
+
+/*
+**> slopehomo
+**
+**  Pesaran-Yamagata (2008) slope homogeneity tests.
+**
+**  Reference:
+**    PESARAN, M.H. AND YAMAGATA, T. (2008), TESTING SLOPE HOMOGENEITY IN LARGE PANELS,
+**    JOURNAL OF ECONOMETRICS, 142(1), 50-93.
+**
+**  Tests H₀: β_i = β for all i (all group slopes are identical).
+**  Two test statistics are returned:
+**    Δ       Asymptotically N(0,1) as N,T → ∞ with √N/T → 0.
+**    Δ̃_adj   Bias-corrected version; preferred when T is small relative to N.
+**
+**  Format:  { delta, pval, delta_adj, pval_adj } = slopehomo(mgO)
+**
+**  Input:   mgO     mgOut struct from mg(), cce_mg(), or dcce_mg().
+**                   Requires mgO.b_vec, mgO.b_mg, mgO.sig_vec, mgO.xxi_vec
+**                   (all populated automatically by the estimators).
+**
+**  Output:  delta       Δ test statistic
+**           pval        Two-sided p-value for Δ
+**           delta_adj   Δ̃_adj bias-corrected statistic
+**           pval_adj    Two-sided p-value for Δ̃_adj
+**
+**  Note:    The test is formulated for the MG regressors (b_mg variables only).
+**           If mgO was produced by cce_mg / dcce_mg, the CSA augmentation
+**           variables are excluded automatically via mgO.numvars.
+*/
+proc (4) = slopehomo(struct mgOut mgO);
+
+    local n, k, b_vec, b_mg, sig_vec, xxi_vec_m;
+    local i, xxi_i, xx_i, b_dm, S;
+    local delta, pval, delta_adj, pval_adj, T_mean;
+
+    n          = mgO.ngroups;
+    k          = mgO.numvars;              // number of MG-regression variables (excl. CSA)
+    b_vec      = mgO.b_vec[., 1:k];       // n×k individual estimates
+    b_mg       = mgO.b_mg[1:k];           // k×1 MG average
+    sig_vec    = mgO.sig_vec;             // n×1 per-group residual SD
+    xxi_vec_m  = mgO.xxi_vec[., 1:k*k];  // n×k² per-group X'X (row-vectorised)
+
+    if n < 2 or k < 1;
+        errorlogat "'slopehomo': Need at least 2 groups and 1 regressor.";
+        end;
+    endif;
+
+    // Swamy-type S statistic:
+    //   S = Σᵢ (b̂ᵢ - b̄)' V̂ᵢ⁻¹ (b̂ᵢ - b̄)
+    //   V̂ᵢ = σ̂²ᵢ (Xᵢ'Xᵢ)⁻¹  ⟹  V̂ᵢ⁻¹ = σ̂ᵢ⁻² (Xᵢ'Xᵢ)
+    S = 0;
+    for i(1, n, 1);
+        xx_i = reshape(xxi_vec_m[i, .], k, k);    // X'X for group i
+        b_dm = b_vec[i, .]' - b_mg;               // k×1 deviation
+        S    = S + (b_dm' * xx_i * b_dm) / sig_vec[i]^2;
+    endfor;
+
+    // Mean effective T per group (for bias correction)
+    T_mean = meanc(vec(mgO.obs_grp));
+
+    // Pesaran-Yamagata Δ statistics (Table 1 of P&Y 2008)
+    //   Δ     = √N × (S/N - k) / √(2k)
+    //   Δ_adj = √N × (S/N - k) / √(2k(1 - k/T̄))
+    delta = sqrt(n) * ((S/n - k) / sqrt(2*k));
+
+    if T_mean > k;
+        delta_adj = sqrt(n) * ((S/n - k) / sqrt(2*k*(1 - k/T_mean)));
+    else;
+        delta_adj = miss();   // T too small to compute bias correction
+    endif;
+
+    pval     = 2*cdfnc(abs(delta));
+    if not ismiss(delta_adj);
+        pval_adj = 2*cdfnc(abs(delta_adj));
+    else;
+        pval_adj = miss();
+    endif;
+
+    retp(delta, pval, delta_adj, pval_adj);
+endp;
+
+
+/*
+** print_slopehomo
+**
+** Prints a formatted summary of slopehomo() results.
+**
+** Format:  print_slopehomo(delta, pval, delta_adj, pval_adj)
+*/
+proc (0) = print_slopehomo(delta, pval, delta_adj, pval_adj);
+    local wid;
+    wid = 60;
+
+    print chrs(61*ones(wid, 1));
+    print "Slope Homogeneity Test (Pesaran & Yamagata, 2008)";
+    print "H0: All group slopes are identical";
+    print chrs(61*ones(wid, 1));
+    sprintf("  %-30s %10s %10s", "Statistic", "Value", "p-value");
+    print chrs(45*ones(wid, 1));
+    sprintf("  %-30s %10.4f %10.4f", "Delta", delta, pval);
+    if not ismiss(delta_adj);
+        sprintf("  %-30s %10.4f %10.4f", "Delta-adj (bias-corrected)", delta_adj, pval_adj);
+    else;
+        sprintf("  %-30s %10s", "Delta-adj", "N/A (T too small)");
+    endif;
+    print chrs(61*ones(wid, 1));
+    print "";
+endp;

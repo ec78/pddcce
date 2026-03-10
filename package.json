@@ -13,8 +13,11 @@
     "src": [
         "cce.sdf",
         "cce_mg.src",
-        "dcceutil.src"
-
+        "dcceutil.src",
+        "slopehomo.src",
+        "cips.src",
+        "latex_export.src",
+        "bootstrap.src"
     ],
-    "version": "0.1.0"
+    "version": "0.2.0"
 }
