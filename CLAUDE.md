@@ -31,11 +31,19 @@ pddcce/
 │   ├── latex_export.src    # LaTeX table export (single and multi-model)
 │   ├── bootstrap.src       # Wild bootstrap standard errors for MG estimators
 │   └── bias_correct.src    # Half-panel jackknife (HPJ) bias correction
+├── docs/
+│   ├── api_reference.md    # Full public API reference
+│   ├── blog_outline.md     # Medium blog post outline
+│   └── research_proposal.md # Academic paper/proposal
 ├── examples/
 │   ├── mg_penn.e           # MG estimator example (Penn World Tables)
 │   ├── cce_penn.e          # CCE-MG example
 │   ├── dcce_penn.e         # DCCE-MG example
 │   ├── cce_proc.e          # Combined MG/CCE-MG/DCCE-MG example
+│   ├── diagnostics.e       # CIPS + slope homogeneity workflow
+│   ├── advanced_cce.e      # pooled CCE, I(1), two-way CCE options
+│   ├── bias_correction.e   # HPJ bias correction + wild bootstrap SE
+│   ├── export_tables.e     # LaTeX single and multi-model export
 │   ├── penn_sample.dta     # Penn World Tables sample data (Stata format)
 │   └── jasa2.dta           # Additional dataset
 └── validation/

@@ -6,6 +6,11 @@
     "dccelib": [
     ],
     "keywords": [
+        "panel data",
+        "cross-sectional dependence",
+        "mean group",
+        "common correlated effects",
+        "econometrics"
     ],
     "license": "GAUSS Standard License Agreement",
     "name": "dccelib",
