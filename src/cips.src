@@ -40,13 +40,15 @@ proc (2) = cips(data, ...);
     local p, demean;
     { p, demean } = dynargsGet(1|2, 0, 1);
 
-    local groupvar, timevar, yname, idvec, datevec, tvec, n, T;
-    local cumtivec, i, y_full, ybar_full;
+    local groupvar, timevar, yname, idvec, datevec, tvec, n, T, varnames;
+    local cumtivec, i, y_full, ybar_full, dybar_full;
     local cips_stat, cadf_vec;
+    local r1, r2, y_i, T_i, t_start, t_end, t_s_idx, agg_tmp;
+    local ybar_i, dybar_i, dy_i, p_p_trim, lhs, rhs, T_eff, j;
+    local xx_inv, b, e, sig2, se_b, k_cadf, beta_col;
 
-    groupvar = getcolnames(data)[1];
-    timevar  = getcolnames(data)[2];
-    yname    = getcolnames(data)[3];
+    { groupvar, timevar, varnames } = __find_time_id_var(data, "", "");
+    yname = varnames[3];
 
     idvec   = unique(data[., groupvar]);
     datevec = unique(data[., timevar]);
@@ -62,11 +64,10 @@ proc (2) = cips(data, ...);
     y_full = data[., 3];
 
     // Cross-sectional mean at each time point: T×1 vector
-    ybar_full = aggregate(data[., groupvar timevar], "mean", timevar);
+    ybar_full = aggregate(data[., timevar$|yname], "mean", timevar);
     ybar_full = ybar_full[., 2];   // T×1 ordered by time
 
     // First difference of ybar: T×1 (first obs = missing/0)
-    local dybar_full;
     dybar_full = ybar_full - lagn(ybar_full, 1);   // T×1; first row is missing
 
     cumtivec = 0|cumsumc(tvec);
@@ -74,7 +75,6 @@ proc (2) = cips(data, ...);
 
     for i(1, n, 1);
 
-        local r1, r2, y_i, T_i, t_start, t_end;
         r1    = cumtivec[i]+1;
         r2    = cumtivec[i+1];
         T_i   = tvec[i];
@@ -82,13 +82,12 @@ proc (2) = cips(data, ...);
 
         // Find where this group sits in the common time vector
         // (for balanced panels all groups span the full T)
-        local t_s_idx;
-        t_s_idx = indnv(aggregate(data[r1:r2, groupvar timevar], "min", groupvar)[., 2], datevec);
+        agg_tmp = aggregate(data[r1:r2, groupvar$|timevar], "min", groupvar);
+        t_s_idx = indnv(agg_tmp[., 2], datevec);
         t_start = t_s_idx[1];          // 1-based index in datevec for group i's first obs
         t_end   = t_start + T_i - 1;
 
         // Extract ybar and dybar aligned with group i's time span
-        local ybar_i, dybar_i;
         ybar_i  = ybar_full[t_start:t_end];
         dybar_i = dybar_full[t_start:t_end];
 
@@ -98,51 +97,46 @@ proc (2) = cips(data, ...);
         //        Δyᵢₜ₋₁, ..., Δyᵢₜ₋ₚ
 
         // Differences
-        local dy_i;
         dy_i = y_i - lagn(y_i, 1);   // T_i×1, first = missing
 
         // Trim: we need p+1 presample obs (1 for dy, p for lags of dy and dybar)
         // Effective start: row p+2 (1-indexed within group)
-        local trim;
-        trim = p + 2;
-        if trim >= T_i;
+        p_trim = p + 2;
+        if p_trim >= T_i;
             // Too few obs for this group — skip (set cadf to missing)
             cadf_vec[i] = miss();
             continue;
         endif;
 
-        local lhs, rhs, T_eff;
-        T_eff = T_i - trim + 1;   // effective observations
+        T_eff = T_i - p_trim + 1;   // effective observations
 
-        lhs = dy_i[trim:T_i];
+        lhs = dy_i[p_trim:T_i];
 
         // Intercept
         rhs = ones(T_eff, 1);
 
         // Optional trend
         if demean == 2;
-            rhs = rhs ~ seqa(trim, 1, T_eff);
+            rhs = rhs ~ seqa(p_trim, 1, T_eff);
         endif;
 
         // Lagged level: yᵢ,ₜ₋₁
-        rhs = rhs ~ y_i[trim-1:T_i-1];
+        rhs = rhs ~ y_i[p_trim-1:T_i-1];
 
         // Lagged cross-sectional mean: ȳₜ₋₁
-        rhs = rhs ~ ybar_i[trim-1:T_i-1];
+        rhs = rhs ~ ybar_i[p_trim-1:T_i-1];
 
         // Contemporaneous and lagged Δȳ: Δȳₜ, Δȳₜ₋₁, ..., Δȳₜ₋ₚ
-        local j;
         for j(0, p, 1);
-            rhs = rhs ~ dybar_i[trim-j:T_i-j];
+            rhs = rhs ~ dybar_i[p_trim-j:T_i-j];
         endfor;
 
         // Lagged Δyᵢ: Δyᵢ,ₜ₋₁, ..., Δyᵢ,ₜ₋ₚ
         for j(1, p, 1);
-            rhs = rhs ~ dy_i[trim-j:T_i-j];
+            rhs = rhs ~ dy_i[p_trim-j:T_i-j];
         endfor;
 
         // OLS
-        local xx_inv, b, e, sig2, se_b, k_cadf;
         k_cadf = cols(rhs);
         xx_inv = pinv(rhs'rhs);
         b      = xx_inv * (rhs'lhs);
@@ -152,7 +146,6 @@ proc (2) = cips(data, ...);
 
         // CADF_i = t-ratio on β̂ᵢ (coefficient on yᵢ,ₜ₋₁, which is column 3 or 4)
         // Column index: 1=const, [2=trend if demean=2], then y_{i,t-1}
-        local beta_col;
         if demean == 2;
             beta_col = 3;
         else;

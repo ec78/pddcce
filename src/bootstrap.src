@@ -43,17 +43,22 @@
 proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
 
     local B, estimator_type;
+    local n, k, b_boot, b_iter;
+    local groupvar, timevar, idvec, tvec, cumtivec_full;
+    local data_boot, r1, r2, i_g;
+    local T_i_g, e_i_g, w_i, ystar_i, e_slice_len;
+    local r1e, r2e, y_i_g, trim_n;
+    local se_boot;
+    struct mgControl ctl_boot;
+    struct mgOut mgO_orig, mgO_b;
+
     { B, estimator_type } = dynargsGet(1|2, 999, "cce_mg");
 
     // Disable reporting during bootstrap iterations
-    local ctl_boot;
     ctl_boot = ctl;
     ctl_boot.report = 0;
 
     // Get original estimates to extract per-group b̂_i and ê_i
-    local mgO_orig;
-    struct mgOut mgO_orig;
-
     if estimator_type $== "mg";
         mgO_orig = mg(data, ctl_boot);
     elseif estimator_type $== "dcce_mg";
@@ -62,7 +67,6 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
         mgO_orig = cce_mg(data, ctl_boot);   // default
     endif;
 
-    local n, k, b_boot, b;
     n      = mgO_orig.ngroups;
     k      = mgO_orig.numvars;
     b_boot = zeros(B, k);
@@ -71,22 +75,20 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
     // We need to reconstruct y* per group from b_vec and e_mg.
     // b_vec[i,.] = β̂_i; e_mg is the stacked residual vector.
 
-    local groupvar, timevar, idvec, tvec, datevec, cumtivec, ctl_orig;
     groupvar = mgO_orig.panel_var;
     timevar  = mgO_orig.time_var;
 
-    idvec   = unique(data[., groupvar]);
-    tvec    = counts(data[., groupvar], idvec);
-    n       = rows(idvec);
+    idvec         = unique(data[., groupvar]);
+    tvec          = counts(data[., groupvar], idvec);
+    n             = rows(idvec);
+    cumtivec_full = 0|cumsumc(tvec);    // constant across bootstrap iterations
+    e_slice_len   = rows(mgO_orig.e_mg) / n;   // per-group residual length (constant)
 
     // Bootstrap loop
-    b = 1;
-    do while b <= B;
+    b_iter = 1;
+    do while b_iter <= B;
 
         // Build bootstrap data: for each group, replace y_i with y*_i
-        local data_boot, r1, r2, i_g;
-        local cumtivec_full;
-        cumtivec_full = 0|cumsumc(tvec);
 
         // Start with original data, then overwrite y column group by group
         data_boot = data;
@@ -94,7 +96,6 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
         for i_g(1, n, 1);
             r1 = cumtivec_full[i_g]+1;
             r2 = cumtivec_full[i_g+1];
-            local T_i_g, e_i_g, b_i_g, x_i_g, yfit_i_g, w_i, ystar_i;
 
             T_i_g  = r2 - r1 + 1;
             e_i_g  = mgO_orig.e_mg;   // Need the correct slice — handled below
@@ -114,18 +115,13 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
             // For balanced panels this works cleanly. For unbalanced/trimmed
             // panels the residual vector may not align 1:1 with data rows.
             // We therefore only apply bootstrap to groups with matching residual lengths.
-            local e_slice_len;
-            e_slice_len = rows(mgO_orig.e_mg) / n;   // per-group residual length
-
             if type(e_slice_len) == 6 and int(e_slice_len) == e_slice_len;
                 // Balanced: direct index
-                local r1e, r2e;
                 r1e   = (i_g-1)*e_slice_len + 1;
                 r2e   = i_g*e_slice_len;
                 e_i_g = mgO_orig.e_mg[r1e:r2e];
 
                 // Trim y_i to match residual length (top rows are lagged-off)
-                local y_i_g, trim_n;
                 trim_n = T_i_g - e_slice_len;
                 y_i_g  = data[r1+trim_n:r2, 3];
 
@@ -139,9 +135,6 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
         endfor;
 
         // Re-estimate on bootstrap data
-        local mgO_b;
-        struct mgOut mgO_b;
-
         if estimator_type $== "mg";
             mgO_b = mg(data_boot, ctl_boot);
         elseif estimator_type $== "dcce_mg";
@@ -150,12 +143,11 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
             mgO_b = cce_mg(data_boot, ctl_boot);
         endif;
 
-        b_boot[b, .] = mgO_b.b_mg[1:k]';
-        b = b + 1;
+        b_boot[b_iter, .] = mgO_b.b_mg[1:k]';
+        b_iter = b_iter + 1;
     endo;
 
     // Bootstrap SE = standard deviation of bootstrap estimates
-    local se_boot;
     se_boot = stdc(b_boot)';
 
     retp(se_boot, b_boot);

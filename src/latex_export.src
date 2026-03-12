@@ -34,7 +34,7 @@ proc (1) = mgOutToLatex(struct mgOut mgO, filename, ...);
     { se_type, note } = dynargsGet(1|2, "NP", "");
 
     local k, i, stars, se_use, coef_i, se_i, t_i, p_i;
-    local varname_i, coef_str, se_str, out_tex;
+    local varname_i, coef_str, se_str, out_tex, vname_tex;
 
     k = rows(mgO.b_mg);
 
@@ -83,7 +83,6 @@ proc (1) = mgOutToLatex(struct mgOut mgO, filename, ...);
         endif;
 
         // Escape underscore in variable name for LaTeX
-        local vname_tex;
         vname_tex = strsplit(varname_i, "_");
         vname_tex = strjoin(vname_tex, "\\_");
 
@@ -154,6 +153,8 @@ proc (1) = mgOutToLatexMulti(struct mgOut mgO_arr, labels, filename, ...);
     local n_models, k, i, j, stars;
     local varname_i, coef_i, se_i, p_i;
     local col_hdr, col_sep;
+    local row_coef, row_se, vname_tex, vname_raw;
+    local row_obs, row_grp, row_r2, row_cd;
 
     n_models = rows(mgO_arr);
     k        = rows(mgO_arr[1].b_mg);
@@ -183,7 +184,6 @@ proc (1) = mgOutToLatexMulti(struct mgOut mgO_arr, labels, filename, ...);
     // Coefficient rows — use union of all variable names
     // For simplicity, iterate over variables in first model
     for i(1, k, 1);
-        local row_coef, row_se, vname_tex, vname_raw;
         vname_raw = mgO_arr[1].mg_vars[i];
         vname_tex = strsplit(vname_raw, "_");
         vname_tex = strjoin(vname_tex, "\\_");
@@ -222,7 +222,6 @@ proc (1) = mgOutToLatexMulti(struct mgOut mgO_arr, labels, filename, ...);
     print "  \\hline";
 
     // Footer rows
-    local row_obs, row_grp, row_r2, row_cd;
     row_obs = "  Observations";
     row_grp = "  Groups";
     row_r2  = "  Mean $R^2$";

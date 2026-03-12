@@ -47,20 +47,21 @@
 */
 proc (1) = hpj(data, struct mgControl ctl, ...);
 
-    local estimator_type;
+    local estimator_type, idx_h1, idx_h2, data_h1, data_h2;
+    local k, b_full, b_h1, b_h2, b_hpj, results_hpj, namevar;
+    struct mgControl ctl_s, ctl_h1, ctl_h2;
+    struct mgOut mgO_full, mgO_h1, mgO_h2, hpjO;
+
     estimator_type = dynargsGet(1, "cce_mg");
 
     // Suppress printing during half-panel runs
-    local ctl_s;
     ctl_s        = ctl;
     ctl_s.report = 0;
 
     // Split panel row indices
-    local idx_h1, idx_h2;
     { idx_h1, idx_h2 } = __panel_half_indices(data);
 
     // Build half-panel datasets
-    local data_h1, data_h2, ctl_h1, ctl_h2;
     data_h1 = data[idx_h1, .];
     data_h2 = data[idx_h2, .];
     ctl_h1  = ctl_s;
@@ -73,13 +74,11 @@ proc (1) = hpj(data, struct mgControl ctl, ...);
     endif;
 
     // Estimate on full panel and both halves
-    struct mgOut mgO_full, mgO_h1, mgO_h2;
     mgO_full = __mg_call(data,    ctl_s,  estimator_type);
     mgO_h1   = __mg_call(data_h1, ctl_h1, estimator_type);
     mgO_h2   = __mg_call(data_h2, ctl_h2, estimator_type);
 
     // HPJ formula — applied to MG variables only (first numvars columns of b_mg)
-    local k, b_full, b_h1, b_h2, b_hpj;
     k      = mgO_full.numvars;
     b_full = mgO_full.b_mg[1:k];
     b_h1   = mgO_h1.b_mg[1:k];
@@ -87,7 +86,6 @@ proc (1) = hpj(data, struct mgControl ctl, ...);
     b_hpj  = 2*b_full - 0.5*(b_h1 + b_h2);
 
     // Build output — start from full-sample result, replace b_mg
-    struct mgOut hpjO;
     hpjO            = mgO_full;
     hpjO.b_mg       = b_hpj;
     hpjO.tvalue     = b_hpj ./ mgO_full.se_mg[1:k];
@@ -100,7 +98,6 @@ proc (1) = hpj(data, struct mgControl ctl, ...);
     hpjO.model   = mgO_full.model $+ " [HPJ Bias-Corrected]";
 
     // Rebuild output table with HPJ estimates
-    local results_hpj, namevar;
     results_hpj  = b_hpj ~ mgO_full.se_mg[1:k] ~ hpjO.tvalue ~ hpjO.pval;
     namevar      = mgO_full.mg_vars[1:k];
     hpjO.out_mg  = asDF(namevar, "y") ~
@@ -124,8 +121,9 @@ proc (2) = __panel_half_indices(data);
 
     local groupvar, idvec, tvec, cumtivec, n, t_h1, t_total;
     local idx_h1, idx_h2, offset_h1, offset_h2, i, r1, t1, t2;
+    local _timevar, _varnames;
 
-    groupvar  = getcolnames(data)[1];
+    { groupvar, _timevar, _varnames } = __find_time_id_var(data, "", "");
     idvec     = unique(data[., groupvar]);
     tvec      = counts(data[., groupvar], idvec);
     n         = rows(idvec);

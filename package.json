@@ -1,5 +1,5 @@
 {
-    "author": "Aptech Systems",
+    "author": "Eric Clower",
     "deps": [
     ],
     "description": "Dynamic Common-Correlated Effects Estimators",
@@ -25,5 +25,5 @@
         "bootstrap.src",
         "bias_correct.src"
     ],
-    "version": "0.3.0"
+    "version": "1.0.0"
 }

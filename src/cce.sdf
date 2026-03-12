@@ -12,6 +12,20 @@ matrix i1;          // 1 = add first-differenced CSA (KPY 2011, for I(1) regress
 matrix two_way;     // 1 = time-demean data before CCE (two-way CCE with time FE). Default 0.
 };
 
+struct pcceNWOut {
+matrix b_pcce;
+matrix cov_pcce;
+matrix sig2_pcce;
+matrix e_pcce;
+matrix se_pcce;
+matrix tvalue_pcce;
+matrix out_pcce;
+matrix ci_vec;
+matrix sig_i_vec;
+matrix cov_pcce_rbst_nw;
+matrix cov_pcce_hs2;
+};
+
 struct mgOut {
 
 // Model description
@@ -69,16 +83,4 @@ matrix meanrho;
 matrix used;
 };
 
-struct pcceNWOut {
-matrix b_pcce;
-matrix cov_pcce;
-matrix sig2_pcce;
-matrix e_pcce;
-matrix se_pcce;
-matrix tvalue_pcce;
-matrix out_pcce;
-matrix ci_vec;
-matrix sig_i_vec;
-matrix cov_pcce_rbst_nw;
-matrix cov_pcce_hs2;
-};
+

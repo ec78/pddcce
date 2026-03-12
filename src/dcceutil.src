@@ -154,7 +154,7 @@ endp;
 
 
 proc (3) = __getdlags(ybar, xbar, crlags);
-    local PT, ybarlags, xbarlags, vars, lags, varnames;
+    local PT, ybarlags, xbarlags, vars, lags, varnames, indx;
 
     // Find lag length
     if crlags;
@@ -177,8 +177,6 @@ proc (3) = __getdlags(ybar, xbar, crlags);
 
     // Lag each x var
     for i(1, vars, 1);
-        local indx;
-
         indx = seqa((i-1)*PT+1, 1, PT);
 
         xbarlags[., (i-1)*PT+1:i*PT] = lagn(xbar[., i], lags);
@@ -191,7 +189,7 @@ proc (3) = __getdlags(ybar, xbar, crlags);
 endp;
 
 
-proc (7) = _getDataMats(data, x_common, data_bar, no_xbar, ylag);
+proc (7) = _getDataMats(data, x_common, data_bar, no_xbar, ylag, timevar);
     local y, x, t, data_d, ybar, xbar_tmp, xbar, xbarname, ybarname, nb_no_xbar;
 
     // Get x and y
@@ -204,7 +202,7 @@ proc (7) = _getDataMats(data, x_common, data_bar, no_xbar, ylag);
         x = setcolnames(x, getcolnames(y)$+"_l", 1);
     endif;
 
-    t = rows(unique(data[., 2]));
+    t = rows(unique(data[., timevar]));
 
     if not (data_bar == miss());
         // Get separate means
@@ -279,13 +277,11 @@ endp;
 
 proc (5) = __getnames(data, x_common, x_csa, ylag);
 
-    local varnames, groupvar, timevar, yname, xnames, dname;
+    local varnames, groupvar, timevar, yname, xnames, dname, tmp;
     if hasmetadata(data);
-        varnames = getcolnames(data);
-        groupvar = varnames[1];
-        timevar  = varnames[2];
-        yname    = varnames[3];
-        xnames   = varnames[4:cols(data)];
+        { groupvar, timevar, varnames } = __find_time_id_var(data, "", "");
+        yname  = varnames[3];
+        xnames = varnames[4:cols(data)];
     else;
         groupvar = "i";
         timevar  = "j";
@@ -301,7 +297,6 @@ proc (5) = __getnames(data, x_common, x_csa, ylag);
         if hasmetadata(x_csa);
             xnames = xnames$|getColnames(x_csa);
         else;
-            local tmp;
             tmp = "x_csa" $+ itos(seqa(1, 1, cols(x_csa)));
         endif;
     endif;
@@ -320,6 +315,7 @@ endp;
 
 proc (10) = _getTimeInfo(data, groupvar, timevar, ...);
     local PT, idvec, tvec, t_n, starttvec, endtvec, miny, maxy, mint, maxt, datevec;
+    local cumtivec, start_i;
 
     PT = dynargsGet(1, 0);
 
@@ -332,9 +328,9 @@ proc (10) = _getTimeInfo(data, groupvar, timevar, ...);
     t_n = counts(data[., timevar], unique(data[., timevar]));
 
     // Start and end time vec
-    starttvec = aggregate(data[., groupvar timevar], "min", groupvar);
+    starttvec = aggregate(data[., groupvar$|timevar], "min", groupvar);
     starttvec = starttvec[., 2];
-    endtvec   = aggregate(data[., groupvar timevar], "max", groupvar);
+    endtvec   = aggregate(data[., groupvar$|timevar], "max", groupvar);
     endtvec   = endtvec[.,2];
 
     // Min and max
@@ -345,7 +341,6 @@ proc (10) = _getTimeInfo(data, groupvar, timevar, ...);
 
     // Adjustments for PT (lag trimming)
     if PT;
-        local cumtivec, start_i;
         cumtivec = 0|cumsumc(tvec);
         start_i  = cumtivec + PT + 1;
         start_i  = start_i[1:rows(start_i)-1];

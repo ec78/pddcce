@@ -38,6 +38,7 @@ proc(1) = dcce_mg(data, ...);
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h,
           groupvar, timevar, zero_xx, zero_idx, ybarlags, xbarlags, PT, datevec,
           isbalanced, y_l, csa_vars, cd_nt, pvalue_cd_nt, meanrho, used;
+    local e, dh_i1, dhname_i1, cumtivec, start_i, start_j, end_j, varname_cce_p;
 
     struct mgControl mgCtl_dflt;
     mgCtl_dflt = mgControlCreate();
@@ -49,7 +50,7 @@ proc(1) = dcce_mg(data, ...);
     { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
 
     // Check if data is balanced
-    isbalanced = __pdbalanced(data[., 1]);
+    isbalanced = __pdbalanced(data[., groupvar]);
 
     // Check for missing values
     if ismiss(data) .== miss();
@@ -75,8 +76,7 @@ proc(1) = dcce_mg(data, ...);
     // Deal with y_lag
     if ctl.y_lags;
         y_l = __getylag(data[., 3], starttvec, endtvec, datevec, isbalanced, n);
-        local e;
-        e    = (data[., 2] .== datevec[1]);
+        e    = (data[., timevar] .== datevec[1]);
         y_l  = delif(y_l, e);
         data = delif(data, e);
         if ctl.x_csa != 0;
@@ -84,7 +84,7 @@ proc(1) = dcce_mg(data, ...);
         endif;
 
         // Update start/time info after lag trim
-        starttvec = aggregate(data[., groupvar timevar], "min", groupvar);
+        starttvec = aggregate(data[., groupvar$|timevar], "min", groupvar);
         starttvec = starttvec[., 2];
         miny      = asDate(posixtostrc(minc(starttvec), "%Y"), "%Y");
         datevec   = datevec[2:rows(datevec)];
@@ -98,7 +98,7 @@ proc(1) = dcce_mg(data, ...);
     csa_vars  = getcolnames(data_bar[., 3:cols(data_bar)]);
 
     // Get data mats
-    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, y_l);
+    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, y_l, timevar);
     data_d = setcolnames(data_d, dname');
 
     // Get dynamic CSA lags
@@ -115,14 +115,12 @@ proc(1) = dcce_mg(data, ...);
     // I(1) augmentation (KPY 2011): add first-differenced CSA alongside levels.
     // Ensures CCE consistency when common factors are integrated.
     if ctl.i1;
-        local dh_i1, dhname_i1;
         { dh_i1, dhname_i1 } = __addDiffCSA(ybar, xbar, starttvec, endtvec, datevec, rows(data));
         h     = h ~ dh_i1;
         hname = hname $| dhname_i1;
     endif;
 
     // Adjust starttvec for CSA lags
-    local cumtivec, start_i;
     cumtivec  = 0|cumsumc(tvec);
     start_i   = cumtivec + PT + 1;
     start_i   = start_i[1:rows(start_i)-1];
@@ -144,7 +142,6 @@ proc(1) = dcce_mg(data, ...);
     cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx, PT);
 
     // CD test (indices relative to post-CSA-lag datevec)
-    local start_j, end_j;
     start_j = indnv(starttvec, datevec) - PT;
     end_j   = indnv(endtvec,   datevec) - PT;
     { cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(cceO.e_mg, n, tvec-PT, start_j, end_j);
@@ -164,7 +161,6 @@ proc(1) = dcce_mg(data, ...);
 
     // Pooled CCE (optional)
     if ctl.pooled;
-        local varname_cce_p;
         varname_cce_p = yname' $| xnames' $| hname';
         cceO.pcce = pcceNW(varname_cce_p, y, x, h, n, tvec, cceO.b_vec[., 1:cols(x)], PT);
     endif;
@@ -189,6 +185,7 @@ proc(1) = mg(data, ...);
           endtvec, miny, maxy, mint, maxt, n, ivec, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, groupvar,
           timevar, zero_xx, zero_idx, datevec, cd_nt, pvalue_cd_nt, meanrho, used;
+    local start_j, end_j, varname_cce_p;
 
     struct mgControl mgCtl_dflt;
     mgCtl_dflt = mgControlCreate();
@@ -207,7 +204,7 @@ proc(1) = mg(data, ...);
     n    = rows(idvec);
     ivec = seqa(1, 1, n);
 
-    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, miss(), ctl.no_xbar, ctl.y_lags);
+    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, miss(), ctl.no_xbar, ctl.y_lags, timevar);
     { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data));
 
     if ctl.zero_x == 0;
@@ -225,7 +222,6 @@ proc(1) = mg(data, ...);
     struct mgOut mgO;
     mgO = _mg(yname', (xnames'$~dname)', y, x~h[.,1:cols(data_d)], n, tvec, zero_xx, zero_idx);
 
-    local start_j, end_j;
     start_j = indnv(starttvec, datevec);
     end_j   = indnv(endtvec,   datevec);
     { cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(mgO.e_mg, n, tvec, start_j, end_j);
@@ -244,7 +240,6 @@ proc(1) = mg(data, ...);
 
     // Pooled CCE (optional — MG with h = intercept only)
     if ctl.pooled;
-        local varname_cce_p;
         varname_cce_p = yname' $| xnames' $| dname';
         mgO.pcce = pcceNW(varname_cce_p, y, x, h[., 1:cols(data_d)], n, tvec, mgO.b_vec[., 1:cols(x)]);
     endif;
@@ -270,6 +265,7 @@ proc(1) = cce_mg(data, ...);
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h,
           csa_vars, groupvar, timevar, zero_xx, zero_idx, datevec,
           cd_nt, pvalue_cd_nt, meanrho, used;
+    local dh_i1, dhname_i1, start_j, end_j, varname_cce_p;
 
     struct mgControl mgCtl_dflt;
     mgCtl_dflt = mgControlCreate();
@@ -300,7 +296,7 @@ proc(1) = cce_mg(data, ...);
     data_bar = getCSA(data, groupvar, timevar, ctl.x_csa);
     csa_vars = getcolnames(data_bar[., 3:cols(data_bar)]);
 
-    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, ctl.y_lags);
+    { y, x, data_d, ybar, xbar, ybarname, xbarname } = _getDataMats(data, ctl.x_common, data_bar, ctl.no_xbar, ctl.y_lags, timevar);
     data_d = setcolnames(data_d, dname');
 
     // Remove x_csa name from xnames after generating xbarnames
@@ -312,7 +308,6 @@ proc(1) = cce_mg(data, ...);
 
     // I(1) augmentation: add first-differenced CSA
     if ctl.i1;
-        local dh_i1, dhname_i1;
         { dh_i1, dhname_i1 } = __addDiffCSA(ybar, xbar, starttvec, endtvec, datevec, rows(data));
         h     = h ~ dh_i1;
         hname = hname $| dhname_i1;
@@ -333,7 +328,6 @@ proc(1) = cce_mg(data, ...);
     struct mgOut cceO;
     cceO = _mg(yname', (xnames'$~hname)', y, x~h, n, tvec, zero_xx, zero_idx);
 
-    local start_j, end_j;
     start_j = indnv(starttvec, datevec);
     end_j   = indnv(endtvec,   datevec);
     { cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(cceO.e_mg, n, tvec, start_j, end_j);
@@ -352,7 +346,6 @@ proc(1) = cce_mg(data, ...);
 
     // Pooled CCE (optional)
     if ctl.pooled;
-        local varname_cce_p;
         varname_cce_p = yname' $| xnames' $| hname';
         cceO.pcce = pcceNW(varname_cce_p, y, x, h, n, tvec, cceO.b_vec[., 1:cols(x)]);
     endif;
@@ -377,6 +370,7 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
     local b_vec, sig_vec, out_mg, r2_vec, xxi_vec_m, r2_i;
     local b_mg, b_dm, cov_mg, se_mg, tvalue_mg, results_mg;
     local t_i, PT, e_mg, cov_pcce_rbst_NW, se_nw, se;
+    local indx, tmp, tmp1;
 
     PT = dynargsGet(1, 0);
 
@@ -420,7 +414,6 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
     e_mg = packr(miss(e_mg, 0));
 
     // Adjustments for normalised variables
-    local indx;
     indx  = rowcontains(seqa(1, 1, cols(b_vec)), zero_x);
     b_mg  = sumc(b_vec) ./ (n - indx);
 
@@ -429,7 +422,6 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
     endif;
 
     // Non-parametric SE (Pesaran 2006 eq.58)
-    local tmp;
     tmp    = reshape(b_mg, rows(b_vec), rows(b_mg));
     se_mg  = (sumc((b_vec - tmp).^2) ./ ((n-indx).*(n-1-indx))).^(1/2);
 
@@ -463,7 +455,6 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
     mgO.k_reg  = k;
     mgO.csa_lags = PT;
 
-    local tmp1;
     tmp1 = unique(tivec);
     if rows(tmp1) == 1;
         mgO.obs_grp = tmp1;
@@ -541,14 +532,22 @@ endp;
 */
 proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
 
-    local PT, cumtivec;
+    local PT, cumtivec, y_t, x_t, h_t, tivec_t;
+    local keep_rows, offset, i_t, r1, r2, keep_n;
+    local cumtivec_t, kx, mx_mx, mx_y, i;
+    local y_i, x_i, h_i, hh_inv, m_h_i, mx_i;
+    local b_pcce, inv_mx;
+    local e_pcce, sig_i_vec, ci_vec, omega_nw, omega_hs2, b_mean;
+    local omega_h_i, z_i, gama0, gamas, s, lg, db;
+    local sig2_pcce, cov_pcce, se_pcce, tvalue_pcce;
+    local cov_pcce_rbst_nw, cov_pcce_hs2;
+    local namedep, namevar_pcce, namevar_h, results_pcce, out_pcce;
+
     PT = dynargsGet(1, 0);
     cumtivec = 0|cumsumc(tivec);
 
     // Trim first PT observations per group if needed
-    local y_t, x_t, h_t, tivec_t;
     if PT > 0;
-        local keep_rows, offset, i_t, r1, r2, keep_n;
         keep_rows = zeros(sumc(tivec) - n*PT, 1);
         offset    = 1;
         for i_t(1, n, 1);
@@ -566,10 +565,8 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
         y_t = y;  x_t = x;  h_t = h;  tivec_t = tivec;
     endif;
 
-    local cumtivec_t;
     cumtivec_t = 0|cumsumc(tivec_t);
 
-    local kx, mx_mx, mx_y, i;
     kx    = cols(x_t);
     mx_mx = zeros(kx, kx);
     mx_y  = zeros(kx, 1);
@@ -577,7 +574,6 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
     // Loop 1: accumulate M_h*X and M_h*y for pooled estimator
     i = 1;
     do while i <= n;
-        local y_i, x_i, h_i, hh_inv, m_h_i, mx_i;
         y_i    = y_t[cumtivec_t[i]+1:cumtivec_t[i+1]];
         x_i    = x_t[cumtivec_t[i]+1:cumtivec_t[i+1], .];
         h_i    = h_t[cumtivec_t[i]+1:cumtivec_t[i+1], .];
@@ -590,12 +586,10 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
     endo;
 
     // Pooled PCCE estimator
-    local b_pcce, inv_mx;
     inv_mx  = pinv(mx_mx);
     b_pcce  = inv_mx * mx_y;
 
     // Loop 2: residuals, variance components, NW kernel
-    local e_pcce, sig_i_vec, ci_vec, omega_nw, omega_hs2, b_mean;
     e_pcce    = zeros(rows(y_t), 1);
     sig_i_vec = zeros(n, 1);
     ci_vec    = zeros(n, cols(h_t));
@@ -605,7 +599,6 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
 
     i = 1;
     do while i <= n;
-        local r1, r2, omega_h_i, z_i, gama0, gamas, s, lg, db;
         r1 = cumtivec_t[i]+1;
         r2 = cumtivec_t[i+1];
 
@@ -642,10 +635,6 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
     endo;
 
     // Scalar variance and covariance matrices
-    local sig2_pcce, cov_pcce, se_pcce, tvalue_pcce;
-    local cov_pcce_rbst_nw, cov_pcce_hs2;
-    local namedep, namevar_pcce, namevar_h, results_pcce, out_pcce;
-
     sig2_pcce        = e_pcce'e_pcce / (sumc(tivec_t) - n*cols(h_t) - kx);
     cov_pcce         = sig2_pcce * inv_mx;
     se_pcce          = sqrt(diag(cov_pcce));
