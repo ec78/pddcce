@@ -117,7 +117,7 @@ proc(1) = dcce_mg(data, ...);
     if ctl.i1;
         { dh_i1, dhname_i1 } = __addDiffCSA(ybar, xbar, starttvec, endtvec, datevec, rows(data));
         h     = h ~ dh_i1;
-        hname = hname $| dhname_i1;
+        hname = hname $~ dhname_i1;
     endif;
 
     // Adjust starttvec for CSA lags
@@ -156,12 +156,12 @@ proc(1) = dcce_mg(data, ...);
     cceO.numvars   = cols(x);
     cceO.df        = cceO.obs_grp - cceO.numvars;
     cceO.y_varname = yname;
-    cceO.mg_vars   = getcolnames(x);
+    cceO.mg_vars   = (xnames'$~hname)';
     cceO.csa_vars  = csa_vars;
 
     // Pooled CCE (optional)
     if ctl.pooled;
-        varname_cce_p = yname' $| xnames' $| hname';
+        varname_cce_p = yname $| cceO.mg_vars;
         cceO.pcce = pcceNW(varname_cce_p, y, x, h, n, tvec, cceO.b_vec[., 1:cols(x)], PT);
     endif;
 
@@ -235,12 +235,12 @@ proc(1) = mg(data, ...);
     mgO.numvars   = cols(x);
     mgO.df        = mgO.obs_grp - mgO.numvars;
     mgO.y_varname = yname;
-    mgO.mg_vars   = getcolnames(x);
+    mgO.mg_vars   = (xnames'$~dname)';
     mgO.csa_vars  = "None";
 
     // Pooled CCE (optional — MG with h = intercept only)
     if ctl.pooled;
-        varname_cce_p = yname' $| xnames' $| dname';
+        varname_cce_p = yname $| mgO.mg_vars;
         mgO.pcce = pcceNW(varname_cce_p, y, x, h[., 1:cols(data_d)], n, tvec, mgO.b_vec[., 1:cols(x)]);
     endif;
 
@@ -310,7 +310,7 @@ proc(1) = cce_mg(data, ...);
     if ctl.i1;
         { dh_i1, dhname_i1 } = __addDiffCSA(ybar, xbar, starttvec, endtvec, datevec, rows(data));
         h     = h ~ dh_i1;
-        hname = hname $| dhname_i1;
+        hname = hname $~ dhname_i1;
     endif;
 
     if ctl.zero_x == 0;
@@ -341,12 +341,12 @@ proc(1) = cce_mg(data, ...);
     cceO.numvars   = cols(x);
     cceO.df        = cceO.obs_grp - cceO.numvars;
     cceO.y_varname = yname;
-    cceO.mg_vars   = getcolnames(x);
+    cceO.mg_vars   = (xnames'$~hname)';
     cceO.csa_vars  = csa_vars;
 
     // Pooled CCE (optional)
     if ctl.pooled;
-        varname_cce_p = yname' $| xnames' $| hname';
+        varname_cce_p = yname $| cceO.mg_vars;
         cceO.pcce = pcceNW(varname_cce_p, y, x, h, n, tvec, cceO.b_vec[., 1:cols(x)]);
     endif;
 
@@ -577,7 +577,7 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
         y_i    = y_t[cumtivec_t[i]+1:cumtivec_t[i+1]];
         x_i    = x_t[cumtivec_t[i]+1:cumtivec_t[i+1], .];
         h_i    = h_t[cumtivec_t[i]+1:cumtivec_t[i+1], .];
-        hh_inv = invpd(h_i'h_i);
+        hh_inv = pinv(h_i'h_i);
         m_h_i  = eye(tivec_t[i]) - h_i*hh_inv*h_i';
         mx_i   = m_h_i*x_i;
         mx_mx  = mx_mx + mx_i'mx_i;
@@ -605,7 +605,7 @@ proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
         y_i    = y_t[r1:r2];
         x_i    = x_t[r1:r2, .];
         h_i    = h_t[r1:r2, .];
-        hh_inv = invpd(h_i'h_i);
+        hh_inv = pinv(h_i'h_i);
         m_h_i  = eye(tivec_t[i]) - h_i*hh_inv*h_i';
         mx_i   = m_h_i*x_i;
 

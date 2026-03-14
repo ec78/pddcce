@@ -123,7 +123,8 @@ proc (2) = __panel_half_indices(data);
     local idx_h1, idx_h2, offset_h1, offset_h2, i, r1, t1, t2;
     local _timevar, _varnames;
 
-    { groupvar, _timevar, _varnames } = __find_time_id_var(data, "", "");
+    _varnames = getcolnames(data);
+    { groupvar, _timevar, _varnames } = __find_time_id_var(data, _varnames[1], _varnames[2]);
     idvec     = unique(data[., groupvar]);
     tvec      = counts(data[., groupvar], idvec);
     n         = rows(idvec);

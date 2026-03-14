@@ -28,7 +28,7 @@
 **    mgOutToLatex(mgO, "output/table1.tex");
 **    mgOutToLatex(mgO, "output/table1.tex", "NP", "Balanced panel, 1970-2014.");
 */
-proc (1) = mgOutToLatex(struct mgOut mgO, filename, ...);
+proc (0) = mgOutToLatex(struct mgOut mgO, filename, ...);
 
     local se_type, note;
     { se_type, note } = dynargsGet(1|2, "NP", "");
@@ -128,7 +128,7 @@ proc (1) = mgOutToLatex(struct mgOut mgO, filename, ...);
 
     output off;
 
-    retp(1);
+    retp;
 endp;
 
 
@@ -145,7 +145,7 @@ endp;
 **          filename  Output .tex file path
 **          note      Optional footer note
 */
-proc (1) = mgOutToLatexMulti(struct mgOut mgO_arr, labels, filename, ...);
+proc (0) = mgOutToLatexMulti(struct mgOut mgO_arr, labels, filename, ...);
 
     local note;
     note = dynargsGet(1, "");
@@ -256,5 +256,5 @@ proc (1) = mgOutToLatexMulti(struct mgOut mgO_arr, labels, filename, ...);
 
     output off;
 
-    retp(1);
+    retp;
 endp;

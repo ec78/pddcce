@@ -77,7 +77,6 @@ print "=================================================================";
 print "PART 1: Single-model LaTeX table (CCE-MG)";
 print "=================================================================";
 
-local out_file_cce;
 out_file_cce = __FILE_DIR $+ "cce_table.tex";
 
 mgOutToLatex(cceO, out_file_cce, "np",
@@ -106,10 +105,8 @@ print "=================================================================";
 print "PART 2: Multi-model comparison table (MG vs CCE-MG vs DCCE-MG)";
 print "=================================================================";
 
-local out_file_multi;
 out_file_multi = __FILE_DIR $+ "comparison_table.tex";
 
-local labels;
 labels = "MG"$|"CCE-MG"$|"DCCE-MG";
 
 // Pass models as a vertical array using the | operator
@@ -145,7 +142,6 @@ print "=================================================================";
 print "PART 3: Numeric coefficient matrix (coeftable)";
 print "=================================================================";
 
-local ct;
 ct = coeftable(cceO);
 
 print;
@@ -172,19 +168,17 @@ print "=================================================================";
 // H0: log_ck = 0 and log_ngd = 0
 // Restriction matrix R selects the first two slope coefficients
 // (excluding the intercept which is stored last)
-local R, b, V, W, df_wald, pval_wald;
-local k;
 k = rows(cceO.b_mg);
 
 // b_mg order: [slope vars..., intercept]
 // R picks out the two slope coefficients
-R = I(k-1) ~ zeros(k-1, 1);    // k-1 x k restriction matrix (exclude intercept)
+R = eye(k-1) ~ zeros(k-1, 1);    // k-1 x k restriction matrix (exclude intercept)
 b = cceO.b_mg;
 V = cceO.cov_mg;
 
 W = b' * R' * invpd(R * V * R') * R * b;
 df_wald = k - 1;
-pval_wald = 1 - cdfchic(W, df_wald);
+pval_wald = cdfchic(W, df_wald);
 
 print;
 print "Wald statistic (H0: all slopes = 0): " $+ ntos(W, 4);

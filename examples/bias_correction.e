@@ -69,12 +69,10 @@ hpjO = hpj(reg_data, ctl, "dcce_mg");
 // Compare full-sample vs. HPJ estimates
 print;
 print "Coefficient comparison (first k=numvars coefficients):";
-local k;
 k = hpjO.numvars;
 
 print "               Uncorrected       HPJ-corrected";
 print "               -----------       -------------";
-local i;
 for i(1, k, 1);
     print hpjO.mg_vars[i] $+
           "     " $+ ntos(dcceO.b_mg[i], 6) $+
@@ -120,11 +118,9 @@ print "PART 2: Wild Bootstrap Standard Errors";
 print "=================================================================";
 
 // Bootstrap SE for DCCE-MG (B=199 for speed; use B=999 in practice)
-local B;
 B = 199;
 
 print "Running " $+ ntos(B, 1) $+ " bootstrap replications for DCCE-MG...";
-local se_boot, b_boot;
 { se_boot, b_boot } = mgBootstrap(reg_data, ctl, B, "dcce_mg");
 
 print;
@@ -145,7 +141,6 @@ print "Use percentile CI: [quantile(b_boot[.,j], 0.025), quantile(b_boot[.,j], 0
 // 95% percentile confidence intervals from bootstrap
 print;
 print "95% Bootstrap percentile confidence intervals:";
-local ci_lower, ci_upper;
 for i(1, k, 1);
     ci_lower = quantile(b_boot[., i], 0.025);
     ci_upper = quantile(b_boot[., i], 0.975);
@@ -173,12 +168,10 @@ struct mgControl cce_ctl2;
 cce_ctl2 = mgControlCreate();
 cce_ctl2.x_csa = data[., "log_hc"];
 
-local se_cce_boot, b_cce_boot;
 { se_cce_boot, b_cce_boot } = mgBootstrap(reg_data, cce_ctl2, B, "cce_mg");
 
 print;
 print "CCE-MG NP SE vs. Bootstrap SE:";
-local k_cce;
 k_cce = hpjO_cce.numvars;
 for i(1, k_cce, 1);
     print hpjO_cce.mg_vars[i] $+

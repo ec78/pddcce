@@ -70,8 +70,6 @@ print "=================================================================";
 print "STEP 2: CIPS Panel Unit Root Tests (Pesaran 2007)";
 print "=================================================================";
 
-local cips_stat, cadf_vec;
-
 // Test log_rgdpo (p=1 augmentation lag)
 print "--- log_rgdpo (Real GDP, log) ---";
 { cips_stat, cadf_vec } = cips(data[., "id" "year" "log_rgdpo"], 1);
@@ -119,7 +117,6 @@ cceCtl.report  = 0;    // suppress estimator output for this step
 struct mgOut cceO;
 cceO = cce_mg(reg_data, cceCtl);
 
-local delta, pval, delta_adj, pval_adj;
 { delta, pval, delta_adj, pval_adj } = slopehomo(cceO);
 print_slopehomo(delta, pval, delta_adj, pval_adj);
 

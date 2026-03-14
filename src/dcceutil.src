@@ -7,10 +7,11 @@
 ** Called automatically when mgCtl.report = 1 (the default).
 */
 proc (0) = __print_mg_output(struct mgOut mgO);
-    local wid, fmt_si, fmt_sf, fmt_ss, fmt_h, fmt_r, k, i;
+    local wid, fmt_si, fmt_sf, fmt_ii, fmt_ss, fmt_h, fmt_r, k, i;
 
     wid = 78;
-    fmt_si = "  %-28s %-12d   %-24s %-12d";
+    fmt_si = "  %-28s %-12s   %-24s %-12d";
+    fmt_ii = "  %-28s %-12d   %-24s %-12d";
     fmt_sf = "  %-28s %-12.4f   %-24s %-12.4f";
     fmt_ss = "  %-28s %-12s   %-24s %-12s";
     fmt_h  = "  %-22s %13s %13s %13s %13s";
@@ -22,18 +23,18 @@ proc (0) = __print_mg_output(struct mgOut mgO);
 
     sprintf(fmt_si, "Panel Variable:",    mgO.panel_var,  "No. of obs:",     mgO.nobs);
     sprintf(fmt_si, "Time Variable:",     mgO.time_var,   "No. of groups:",  mgO.ngroups);
-    sprintf(fmt_ss, "Dependent Var:",     mgO.y_varname,  "No. CSA lags:",   mgO.csa_lags);
+    sprintf(fmt_si, "Dependent Var:",     mgO.y_varname,  "No. CSA lags:",   mgO.csa_lags);
 
     if not ismiss(mgO.R_sq);
         sprintf(fmt_sf, "CD stat:", mgO.cd_stat, "CD p-value:", mgO.cd_pval);
-        sprintf("  %-28s %-12.4f", "Mean within-group R²:", mgO.R_sq);
+        sprintf("  %-28s %-12.4f", "Mean within-group RÂ²:", mgO.R_sq);
     else;
         sprintf(fmt_sf, "CD stat:", mgO.cd_stat, "CD p-value:", mgO.cd_pval);
     endif;
 
     if rows(mgO.obs_grp) == 1;
-        sprintf(fmt_si, "DF per group:", mgO.df, "Obs. per group:", mgO.obs_grp);
-        sprintf(fmt_si, "DF per group (w/CSA):", mgO.df_csa, "", 0);
+        sprintf(fmt_ii, "DF per group:", mgO.df, "Obs. per group:", mgO.obs_grp);
+        sprintf(fmt_ii, "DF per group (w/CSA):", mgO.df_csa, "", 0);
     else;
         sprintf(fmt_ss, "Obs. per group:", "Unbalanced", "", "");
     endif;
@@ -279,7 +280,8 @@ proc (5) = __getnames(data, x_common, x_csa, ylag);
 
     local varnames, groupvar, timevar, yname, xnames, dname, tmp;
     if hasmetadata(data);
-        { groupvar, timevar, varnames } = __find_time_id_var(data, "", "");
+        varnames = getcolnames(data);
+        { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
         yname  = varnames[3];
         xnames = varnames[4:cols(data)];
     else;
@@ -477,11 +479,11 @@ endp;
 proc (2) = __addDiffCSA(ybar, xbar, starttvec, endtvec, datevec, bigT);
     local dybar, dxbar, h_diff, dname;
 
-    // First differences of cross-sectional averages
-    dybar = ybar - lagn(ybar, 1);
+    // First differences of cross-sectional averages (first period set to 0 per KPY convention)
+    dybar = missrv(ybar - lagn(ybar, 1), 0);
     dybar = setcolnames(dybar, getcolnames(ybar) $+ "_d");
 
-    dxbar = xbar - lagn(xbar, 1);
+    dxbar = missrv(xbar - lagn(xbar, 1), 0);
     dxbar = setcolnames(dxbar, getcolnames(xbar) $+ "_d");
 
     // Reshape to stacked panel format

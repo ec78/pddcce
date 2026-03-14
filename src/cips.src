@@ -44,10 +44,11 @@ proc (2) = cips(data, ...);
     local cumtivec, i, y_full, ybar_full, dybar_full;
     local cips_stat, cadf_vec;
     local r1, r2, y_i, T_i, t_start, t_end, t_s_idx, agg_tmp;
-    local ybar_i, dybar_i, dy_i, p_p_trim, lhs, rhs, T_eff, j;
-    local xx_inv, b, e, sig2, se_b, k_cadf, beta_col;
+    local ybar_i, dybar_i, dy_i, lhs, rhs, T_eff, j;
+    local xx_inv, b, e, sig2, se_b, k_cadf, beta_col, p_trim;
 
-    { groupvar, timevar, varnames } = __find_time_id_var(data, "", "");
+    varnames = getcolnames(data);
+    { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
     yname = varnames[3];
 
     idvec   = unique(data[., groupvar]);
