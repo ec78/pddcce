@@ -25,7 +25,7 @@ library dccelib;
 // -----------------------------------------------------------------------
 // Load data and run three estimators
 // -----------------------------------------------------------------------
-fname = __FILE_DIR $+ "penn_sample.dta";
+fname = __FILE_DIR $+ "penn_world.dta";
 data  = packr(loadd(fname, ". + date($year, '%Y')"));
 data  = order(data, "id"$|"year");
 

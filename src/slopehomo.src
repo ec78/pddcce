@@ -9,10 +9,10 @@
 **    PESARAN, M.H. AND YAMAGATA, T. (2008), TESTING SLOPE HOMOGENEITY IN LARGE PANELS,
 **    JOURNAL OF ECONOMETRICS, 142(1), 50-93.
 **
-**  Tests H₀: β_i = β for all i (all group slopes are identical).
+**  Tests H_0: beta_i = beta for all i (all group slopes are identical).
 **  Two test statistics are returned:
-**    Δ       Asymptotically N(0,1) as N,T → ∞ with √N/T → 0.
-**    Δ̃_adj   Bias-corrected version; preferred when T is small relative to N.
+**    Delta       Asymptotically N(0,1) as N,T -> inf with sqrtN/T -> 0.
+**    Delta_tilde_adj   Bias-corrected version; preferred when T is small relative to N.
 **
 **  Format:  { delta, pval, delta_adj, pval_adj } = slopehomo(mgO)
 **
@@ -20,10 +20,10 @@
 **                   Requires mgO.b_vec, mgO.b_mg, mgO.sig_vec, mgO.xxi_vec
 **                   (all populated automatically by the estimators).
 **
-**  Output:  delta       Δ test statistic
-**           pval        Two-sided p-value for Δ
-**           delta_adj   Δ̃_adj bias-corrected statistic
-**           pval_adj    Two-sided p-value for Δ̃_adj
+**  Output:  delta       Delta test statistic
+**           pval        Two-sided p-value for Delta
+**           delta_adj   Delta_tilde_adj bias-corrected statistic
+**           pval_adj    Two-sided p-value for Delta_tilde_adj
 **
 **  Note:    The test is formulated for the MG regressors (b_mg variables only).
 **           If mgO was produced by cce_mg / dcce_mg, the CSA augmentation
@@ -37,32 +37,36 @@ proc (4) = slopehomo(struct mgOut mgO);
 
     n          = mgO.ngroups;
     k          = mgO.numvars;              // number of MG-regression variables (excl. CSA)
-    b_vec      = mgO.b_vec[., 1:k];       // n×k individual estimates
-    b_mg       = mgO.b_mg[1:k];           // k×1 MG average
-    sig_vec    = mgO.sig_vec;             // n×1 per-group residual SD
-    xxi_vec_m  = mgO.xxi_vec[., 1:k*k];  // n×k² per-group X'X (row-vectorised)
+    b_vec      = mgO.b_vec[., 1:k];       // nxk individual estimates
+    b_mg       = mgO.b_mg[1:k];           // kx1 MG average
+    sig_vec    = mgO.sig_vec;             // nx1 per-group residual SD
+    xxi_vec_m  = mgO.xxi_vec[., 1:k*k];  // nxk^2 per-group X'X (row-vectorised)
 
     if n < 2 or k < 1;
         errorlogat "'slopehomo': Need at least 2 groups and 1 regressor.";
         end;
     endif;
 
-    // Swamy-type S statistic:
-    //   S = Σᵢ (b̂ᵢ - b̄)' V̂ᵢ⁻¹ (b̂ᵢ - b̄)
-    //   V̂ᵢ = σ̂²ᵢ (Xᵢ'Xᵢ)⁻¹  ⟹  V̂ᵢ⁻¹ = σ̂ᵢ⁻² (Xᵢ'Xᵢ)
+    /*
+    ** Swamy-type S statistic:
+    **   S = Sum_i (b_hat_i - b_bar)' V_hat_i^-1 (b_hat_i - b_bar)
+    **   V_hat_i = sigma_hat^2_i (X_i'X_i)^-1  =>  V_hat_i^-1 = sigma_hat_i^-2 (X_i'X_i)
+    */
     S = 0;
     for i(1, n, 1);
         xx_i = reshape(xxi_vec_m[i, .], k, k);    // X'X for group i
-        b_dm = b_vec[i, .]' - b_mg;               // k×1 deviation
+        b_dm = b_vec[i, .]' - b_mg;               // kx1 deviation
         S    = S + (b_dm' * xx_i * b_dm) / sig_vec[i]^2;
     endfor;
 
     // Mean effective T per group (for bias correction)
     T_mean = meanc(vec(mgO.obs_grp));
 
-    // Pesaran-Yamagata Δ statistics (Table 1 of P&Y 2008)
-    //   Δ     = √N × (S/N - k) / √(2k)
-    //   Δ_adj = √N × (S/N - k) / √(2k(1 - k/T̄))
+    /*
+    ** Pesaran-Yamagata Delta statistics (Table 1 of P&Y 2008)
+    **   Delta     = sqrtN x (S/N - k) / sqrt(2k)
+    **   Delta_adj = sqrtN x (S/N - k) / sqrt(2k(1 - k/T_bar))
+    */
     delta = sqrt(n) * ((S/n - k) / sqrt(2*k));
 
     if T_mean > k;

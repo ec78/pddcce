@@ -6,7 +6,7 @@
 **  Wild bootstrap standard errors for MG, CCE-MG, and DCCE-MG estimators.
 **
 **  The wild bootstrap resamples residuals within each group using a
-**  Rademacher distribution (weights ±1 with equal probability), preserving
+**  Rademacher distribution (weights +/-1 with equal probability), preserving
 **  the heteroskedasticity and serial correlation structure of the original
 **  residuals. See Westerlund & Urbain (2015) for the panel MG context.
 **
@@ -15,12 +15,12 @@
 **    PRINCIPAL COMPONENTS, JOURNAL OF ECONOMETRICS, 185(2), 372-377.
 **
 **  Algorithm:
-**    1. Estimate the original model → get b̂_i, ê_i for each group i.
+**    1. Estimate the original model -> get b_hat_i, e_i for each group i.
 **    2. For b = 1,...,B:
 **       a. For each group i, draw Rademacher weights w_t ~ {-1,+1}.
-**       b. Construct bootstrap response: y*_i = X_i b̂_i + ê_i ⊙ w_i
-**       c. Re-estimate MG on (y*, X) → b̂*_b.
-**    3. Bootstrap SE: se_boot_k = std(b̂*_k across B replications).
+**       b. Construct bootstrap response: y*_i = X_i b_hat_i + e_i .x w_i
+**       c. Re-estimate MG on (y*, X) -> b_hat*_b.
+**    3. Bootstrap SE: se_boot_k = std(b_hat*_k across B replications).
 **
 **  Format:  { se_boot, b_boot } = mgBootstrap(data, mgCtl, B)
 **
@@ -28,8 +28,8 @@
 **           mgCtl   mgControl struct (same ctl used to get original estimates).
 **           B       Number of bootstrap replications. Default 999.
 **
-**  Output:  se_boot   k×1 vector of bootstrap SEs for MG variables.
-**           b_boot    B×k matrix of bootstrap MG estimates (for diagnostics).
+**  Output:  se_boot   kx1 vector of bootstrap SEs for MG variables.
+**           b_boot    Bxk matrix of bootstrap MG estimates (for diagnostics).
 **
 **  Usage:
 **    struct mgControl ctl;
@@ -58,7 +58,7 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
     ctl_boot = ctl;
     ctl_boot.report = 0;
 
-    // Get original estimates to extract per-group b̂_i and ê_i
+    // Get original estimates to extract per-group b_hat_i and e_i
     if estimator_type $== "mg";
         mgO_orig = mg(data, ctl_boot);
     elseif estimator_type $== "dcce_mg";
@@ -71,9 +71,11 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
     k      = mgO_orig.numvars;
     b_boot = zeros(B, k);
 
-    // Get per-group residuals and fitted values from original estimation
-    // We need to reconstruct y* per group from b_vec and e_mg.
-    // b_vec[i,.] = β̂_i; e_mg is the stacked residual vector.
+    /*
+    ** Get per-group residuals and fitted values from original estimation
+    ** We need to reconstruct y* per group from b_vec and e_mg.
+    ** b_vec[i,.] = beta_hat_i; e_mg is the stacked residual vector.
+    */
 
     groupvar = mgO_orig.panel_var;
     timevar  = mgO_orig.time_var;
@@ -98,23 +100,27 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
             r2 = cumtivec_full[i_g+1];
 
             T_i_g  = r2 - r1 + 1;
-            e_i_g  = mgO_orig.e_mg;   // Need the correct slice — handled below
+            e_i_g  = mgO_orig.e_mg;   // Need the correct slice  --  handled below
 
-            // Rademacher weights: ±1 with equal probability
+            // Rademacher weights: +/-1 with equal probability
             w_i = 2*(rndu(T_i_g, 1) .> 0.5) - 1;
 
-            // For the bootstrap y, we need fitted values + reweighted residuals.
-            // Fitted value: ŷ_i = X_i b̂_i (X includes intercept+CSA via h).
-            // We reconstruct from the raw data by noting:
-            //   y_i = ŷ_i + ê_i  =>  y*_i = ŷ_i + w_i ⊙ ê_i = y_i + (w_i - 1) ⊙ ê_i
+            /*
+            ** For the bootstrap y, we need fitted values + reweighted residuals.
+            ** Fitted value: yhat_i = X_i b_hat_i (X includes intercept+CSA via h).
+            ** We reconstruct from the raw data by noting:
+            **   y_i = yhat_i + e_i  =>  y*_i = yhat_i + w_i .x e_i = y_i + (w_i - 1) .x e_i
+            */
 
-            // Extract the e_i slice. The e_mg vector may be shorter than NT
-            // if y_lags or cr_lags were used (trimming). To keep it simple,
-            // we use the original y and add (w-1)*e where e aligns.
-            //
-            // For balanced panels this works cleanly. For unbalanced/trimmed
-            // panels the residual vector may not align 1:1 with data rows.
-            // We therefore only apply bootstrap to groups with matching residual lengths.
+            /*
+            ** Extract the e_i slice. The e_mg vector may be shorter than NT
+            ** if y_lags or cr_lags were used (trimming). To keep it simple,
+            ** we use the original y and add (w-1)*e where e aligns.
+            ** 
+            ** For balanced panels this works cleanly. For unbalanced/trimmed
+            ** panels the residual vector may not align 1:1 with data rows.
+            ** We therefore only apply bootstrap to groups with matching residual lengths.
+            */
             if type(e_slice_len) == 6 and int(e_slice_len) == e_slice_len;
                 // Balanced: direct index
                 r1e   = (i_g-1)*e_slice_len + 1;

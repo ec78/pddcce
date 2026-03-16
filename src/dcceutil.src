@@ -27,7 +27,7 @@ proc (0) = __print_mg_output(struct mgOut mgO);
 
     if not ismiss(mgO.R_sq);
         sprintf(fmt_sf, "CD stat:", mgO.cd_stat, "CD p-value:", mgO.cd_pval);
-        sprintf("  %-28s %-12.4f", "Mean within-group RÂ²:", mgO.R_sq);
+        sprintf("  %-28s %-12.4f", "Mean within-group R^2:", mgO.R_sq);
     else;
         sprintf(fmt_sf, "CD stat:", mgO.cd_stat, "CD p-value:", mgO.cd_pval);
     endif;
@@ -75,7 +75,7 @@ endp;
 /*
 ** coeftable
 **
-** Returns the MG results as a plain numeric matrix (k×4):
+** Returns the MG results as a plain numeric matrix (kx4):
 **   columns: [coef, se_NP, t_NP, p_NP]
 ** Useful for downstream computations without the dataframe wrapper.
 */
@@ -88,19 +88,21 @@ endp;
 ** __olsIndividual
 **
 ** Per-group OLS.  Returns 7 values:
-**   b_i          k×1 coefficient vector
-**   e_i          t_i×1 residuals
-**   inverse_x_x  k×k (X'X)^{-1}
+**   b_i          kx1 coefficient vector
+**   e_i          t_ix1 residuals
+**   inverse_x_x  kxk (X'X)^{-1}
 **   sig_i        scalar residual SD
 **   sig2_i       scalar residual variance
-**   se           1×k individual OLS standard errors
-**   r2_i         scalar within-group R²
+**   se           1xk individual OLS standard errors
+**   r2_i         scalar within-group R^2
 */
 proc (7) = __olsIndividual(y_i, x_i, t_i, k, zero_id);
     local b_i, e_i, inverse_x_x, sig2_i, sig_i, se, xx, r2_i, ss_tot;
 
-    // OLS — compute (X'X)^{-1} once; reuse for b and SE.
-    // pinv() handles rank-deficient designs gracefully.
+    /*
+    ** OLS  --  compute (X'X)^{-1} once; reuse for b and SE.
+    ** pinv() handles rank-deficient designs gracefully.
+    */
     xx          = x_i'x_i;
     inverse_x_x = pinv(xx);
     b_i         = inverse_x_x * (x_i'y_i);
@@ -115,7 +117,7 @@ proc (7) = __olsIndividual(y_i, x_i, t_i, k, zero_id);
     sig2_i = sig_i^2;
     se     = sqrt(diag(sig2_i * inverse_x_x))';
 
-    // Within-group R²
+    // Within-group R^2
     ss_tot = (y_i - meanc(y_i))'(y_i - meanc(y_i));
     if ss_tot > 0;
         r2_i = 1 - (e_i'e_i) / ss_tot;
@@ -420,7 +422,7 @@ endp;
 proc (1) = __timedemean(data, groupvar, timevar);
     local data_bar_t, datevec, time_obs, time_idx, data_demeaned;
 
-    // Cross-sectional means at each time period (T × cols(data))
+    // Cross-sectional means at each time period (T x cols(data))
     data_bar_t = aggregate(data, "mean", timevar);
     data_bar_t = order(data_bar_t, timevar);
 
@@ -429,7 +431,7 @@ proc (1) = __timedemean(data, groupvar, timevar);
 
     // Map each observation to its time's row in data_bar_t
     time_obs = data[., timevar];
-    time_idx = indnv(time_obs, datevec);    // NT×1 integer index into datevec
+    time_idx = indnv(time_obs, datevec);    // NTx1 integer index into datevec
 
     // Subtract time mean from y and x columns only
     data_demeaned = data;
@@ -443,7 +445,7 @@ endp;
 /*
 ** __timedemean_xcsa
 **
-** Time-demeans an auxiliary x_csa matrix (NT × k, no id/time columns).
+** Time-demeans an auxiliary x_csa matrix (NT x k, no id/time columns).
 ** Requires the panel time column so cross-sectional means can be identified.
 ** Used when ctl.two_way = 1 and ctl.x_csa != 0.
 */
@@ -471,7 +473,7 @@ endp;
 /*
 ** __addDiffCSA
 **
-** Computes first-differenced cross-sectional averages (Δȳₜ, Δx̄ₜ) and reshapes
+** Computes first-differenced cross-sectional averages (Delta ybar_t, Deltax_bar_t) and reshapes
 ** them into panel format.  Used when ctl.i1 = 1 (KPY 2011, I(1) regressors):
 ** adding differenced CSA alongside standard CSA levels ensures CCE consistency
 ** when the common factors are integrated.

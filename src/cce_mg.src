@@ -26,9 +26,9 @@
 **
 **  Output:  dcceO       mgOut struct. Key fields:
 **             .b_mg / .se_mg / .tvalue / .pval   MG estimates (NP SE, Pesaran 2006 eq.58)
-**             .ci             k×2 95% confidence intervals
-**             .R_sq           Mean within-group R²
-**             .b_stats        k×4 [min, mean, max, sd] of individual b_i
+**             .ci             kx2 95% confidence intervals
+**             .R_sq           Mean within-group R^2
+**             .b_stats        kx4 [min, mean, max, sd] of individual b_i
 **             .cd_stat / .cd_pval   Pesaran (2004) CD test
 **             .pcce           Pooled CCE results (pcceNWOut, if .pooled=1)
 */
@@ -63,9 +63,11 @@ proc(1) = dcce_mg(data, ...);
     n    = rows(idvec);
     ivec = seqa(1, 1, n);
 
-    // Two-way CCE: time-demean y and x before computing CSA.
-    // This adds a time fixed-effect layer (orthogonal to the CSA augmentation)
-    // so the model accounts for both individual heterogeneity and time-specific shocks.
+    /*
+    ** Two-way CCE: time-demean y and x before computing CSA.
+    ** This adds a time fixed-effect layer (orthogonal to the CSA augmentation)
+    ** so the model accounts for both individual heterogeneity and time-specific shocks.
+    */
     if ctl.two_way;
         data = __timedemean(data, groupvar, timevar);
         if ctl.x_csa != 0;
@@ -112,8 +114,10 @@ proc(1) = dcce_mg(data, ...);
     // Form h mat for regression
     { h, hname } = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, rows(data), ybarlags, xbarlags, PT);
 
-    // I(1) augmentation (KPY 2011): add first-differenced CSA alongside levels.
-    // Ensures CCE consistency when common factors are integrated.
+    /*
+    ** I(1) augmentation (KPY 2011): add first-differenced CSA alongside levels.
+    ** Ensures CCE consistency when common factors are integrated.
+    */
     if ctl.i1;
         { dh_i1, dhname_i1 } = __addDiffCSA(ybar, xbar, starttvec, endtvec, datevec, rows(data));
         h     = h ~ dh_i1;
@@ -238,7 +242,7 @@ proc(1) = mg(data, ...);
     mgO.mg_vars   = (xnames'$~dname)';
     mgO.csa_vars  = "None";
 
-    // Pooled CCE (optional — MG with h = intercept only)
+    // Pooled CCE (optional  --  MG with h = intercept only)
     if ctl.pooled;
         varname_cce_p = yname $| mgO.mg_vars;
         mgO.pcce = pcceNW(varname_cce_p, y, x, h[., 1:cols(data_d)], n, tvec, mgO.b_vec[., 1:cols(x)]);
@@ -359,10 +363,10 @@ endp;
 
 
 /*
-** _mg  —  Core mean-group OLS loop (internal)
+** _mg   --   Core mean-group OLS loop (internal)
 **
 ** Called by mg, cce_mg, dcce_mg after data matrices are assembled.
-** Now also computes: per-group R², CI, heterogeneity stats, xxi_vec.
+** Now also computes: per-group R^2, CI, heterogeneity stats, xxi_vec.
 */
 proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
 
@@ -397,7 +401,7 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
         { b_i, e_i, inverse_x_x, sig_i, sig2_i, se[i, .], r2_i } =
             __olsIndividual(y_i, x_i, t_i, k, (i == zero_id));
 
-        // Store X'X (not its inverse) — needed for slope homogeneity test
+        // Store X'X (not its inverse)  --  needed for slope homogeneity test
         xxi_vec_m[i, .] = vec(x_i'x_i)';
 
         // Newey-West SE for group i
@@ -468,11 +472,13 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
     // 95% confidence intervals
     mgO.ci = b_mg - 1.96*se_mg ~ b_mg + 1.96*se_mg;
 
-    // Mean within-group R²
+    // Mean within-group R^2
     mgO.R_sq = meanc(packr(r2_vec));
 
-    // Heterogeneity table: k×4 [min, mean, max, sd]
-    // Only for MG variables (first numvars cols; b_vec may include CSA cols)
+    /*
+    ** Heterogeneity table: kx4 [min, mean, max, sd]
+    ** Only for MG variables (first numvars cols; b_vec may include CSA cols)
+    */
     mgO.b_stats = minc(b_vec)' ~ meanc(b_vec)' ~ maxc(b_vec)' ~ stdc(b_vec)';
 
     // Output dataframe
@@ -513,19 +519,19 @@ endp;
 **
 **  Format:  pcceO = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg [, PT])
 **
-**  Input:   varname_cce   (1 + k_x + k_h) × 1 string vector: [yname; xnames; hnames]
-**           y             NT×1 dependent variable
-**           x             NT×k_x individual-specific regressors
-**           h             NT×k_h non-individual-specific (intercept, CSA, CSA lags)
+**  Input:   varname_cce   (1 + k_x + k_h) x 1 string vector: [yname; xnames; hnames]
+**           y             NTx1 dependent variable
+**           x             NTxk_x individual-specific regressors
+**           h             NTxk_h non-individual-specific (intercept, CSA, CSA lags)
 **           n             Number of cross-section units
-**           tivec         N×1 vector of time-series lengths per group
-**           b_vec_mg      n×k_x MG coefficient estimates (for hs2 variance)
+**           tivec         Nx1 vector of time-series lengths per group
+**           b_vec_mg      nxk_x MG coefficient estimates (for hs2 variance)
 **           PT            Optional. CSA lag order to trim from each group. Default 0.
 **
 **  Output:  pcceO         pcceNWOut struct:
-**             .b_pcce       k_x×1 pooled PCCE estimator
-**             .se_pcce      k_x×1 SE (homoskedastic)
-**             .tvalue_pcce  k_x×1 t-values
+**             .b_pcce       k_xx1 pooled PCCE estimator
+**             .se_pcce      k_xx1 SE (homoskedastic)
+**             .tvalue_pcce  k_xx1 t-values
 **             .out_pcce     formatted output dataframe
 **             .cov_pcce_rbst_nw   NW robust covariance
 **             .cov_pcce_hs2       Pesaran NP covariance
@@ -670,7 +676,7 @@ endp;
 
 
 /*
-**  cdtest  —  Pesaran (2004) CD test for cross-sectional dependence.
+**  cdtest   --   Pesaran (2004) CD test for cross-sectional dependence.
 **
 **  Format:  { cd_nt, pvalue_cd_nt, meanrho, used } = cdtest(e, n, tivec, starttvec, endtvec)
 **

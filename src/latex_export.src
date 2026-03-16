@@ -10,7 +10,7 @@
 **    - Standard errors in parentheses in the second row
 **    - Significance stars (* p<0.10, ** p<0.05, *** p<0.01)
 **    - CD test statistic and p-value in the footer
-**    - Mean within-group R² if available
+**    - Mean within-group R^2 if available
 **    - 95% CI if available
 **
 **  Format:  mgOutToLatex(mgO, filename)
@@ -181,8 +181,10 @@ proc (0) = mgOutToLatexMulti(struct mgOut mgO_arr, labels, filename, ...);
     print col_hdr $+ " \\\\";
     print "  \\hline";
 
-    // Coefficient rows — use union of all variable names
-    // For simplicity, iterate over variables in first model
+    /*
+    ** Coefficient rows  --  use union of all variable names
+    ** For simplicity, iterate over variables in first model
+    */
     for i(1, k, 1);
         vname_raw = mgO_arr[1].mg_vars[i];
         vname_tex = strsplit(vname_raw, "_");

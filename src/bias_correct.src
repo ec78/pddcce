@@ -13,9 +13,9 @@
 **  by combining the full-sample estimate with estimates on the first and second halves
 **  of the time dimension for each group:
 **
-**    b̂_hpj = 2 b̂_full − (b̂_h1 + b̂_h2) / 2
+**    b_hat_hpj = 2 b_hat_full - (b_hat_h1 + b_hat_h2) / 2
 **
-**  where b̂_full is estimated on the full panel and b̂_h1, b̂_h2 on each half.
+**  where b_hat_full is estimated on the full panel and b_hat_h1, b_hat_h2 on each half.
 **
 **  Standard errors: the NP SE from the full-sample estimate is used as a conservative
 **  approximation. For HPJ-specific SE, use mgBootstrap() after obtaining HPJ estimates.
@@ -78,22 +78,24 @@ proc (1) = hpj(data, struct mgControl ctl, ...);
     mgO_h1   = __mg_call(data_h1, ctl_h1, estimator_type);
     mgO_h2   = __mg_call(data_h2, ctl_h2, estimator_type);
 
-    // HPJ formula — applied to MG variables only (first numvars columns of b_mg)
+    // HPJ formula  --  applied to MG variables only (first numvars columns of b_mg)
     k      = mgO_full.numvars;
     b_full = mgO_full.b_mg[1:k];
     b_h1   = mgO_h1.b_mg[1:k];
     b_h2   = mgO_h2.b_mg[1:k];
     b_hpj  = 2*b_full - 0.5*(b_h1 + b_h2);
 
-    // Build output — start from full-sample result, replace b_mg
+    // Build output  --  start from full-sample result, replace b_mg
     hpjO            = mgO_full;
     hpjO.b_mg       = b_hpj;
     hpjO.tvalue     = b_hpj ./ mgO_full.se_mg[1:k];
     hpjO.pval       = 2*cdftc(hpjO.tvalue, mgO_full.df_csa);
     hpjO.ci         = b_hpj - 1.96*mgO_full.se_mg[1:k] ~ b_hpj + 1.96*mgO_full.se_mg[1:k];
 
-    // Store all three estimates in b_stats for easy access:
-    //   col 1: full-panel b_mg, col 2: first-half, col 3: second-half, col 4: HPJ
+    /*
+    ** Store all three estimates in b_stats for easy access:
+    **   col 1: full-panel b_mg, col 2: first-half, col 3: second-half, col 4: HPJ
+    */
     hpjO.b_stats = b_full ~ b_h1 ~ b_h2 ~ b_hpj;
     hpjO.model   = mgO_full.model $+ " [HPJ Bias-Corrected]";
 
@@ -155,7 +157,7 @@ endp;
 
 
 /*
-** __mg_call  —  Dispatch helper: calls mg, cce_mg, or dcce_mg by name.
+** __mg_call   --   Dispatch helper: calls mg, cce_mg, or dcce_mg by name.
 */
 proc (1) = __mg_call(data, struct mgControl ctl, estimator_type);
     struct mgOut mgO;

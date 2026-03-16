@@ -1,20 +1,20 @@
 /*
 **> cips
 **
-**  Pesaran (2007) Panel Unit Root Test — CIPS (Cross-sectionally Augmented IPS).
+**  Pesaran (2007) Panel Unit Root Test  --  CIPS (Cross-sectionally Augmented IPS).
 **
 **  Reference:
 **    PESARAN, M.H. (2007), A SIMPLE PANEL UNIT ROOT TEST IN THE PRESENCE OF
 **    CROSS-SECTION DEPENDENCE, JOURNAL OF APPLIED ECONOMETRICS, 22(2), 265-312.
 **
-**  Tests H₀: each series has a unit root (panel unit root).
+**  Tests H_0: each series has a unit root (panel unit root).
 **  The CADF(p) regression for group i is:
 **
-**    Δyᵢₜ = αᵢ + βᵢ yᵢ,ₜ₋₁ + c₀ ȳₜ₋₁ + Σⱼ₌₀ᵖ dⱼ Δȳₜ₋ⱼ + Σⱼ₌₁ᵖ fⱼ Δyᵢ,ₜ₋ⱼ + uᵢₜ
+**    Delta y_it = alpha_i + beta_i y_i,t-1 + c_0 ybart-1 + Sum_j=0^p d_j Delta ybar_t-j + Sum_j=1^p f_j Delta y_i,t-j + u_it
 **
-**  where ȳₜ = cross-sectional mean of y at time t.
-**  The CADF_i = t-ratio on β̂ᵢ.
-**  CIPS = (1/N) Σᵢ CADF_i.
+**  where ybart = cross-sectional mean of y at time t.
+**  The CADF_i = t-ratio on beta_hat_i.
+**  CIPS = (1/N) Sum_i CADF_i.
 **
 **  Inference: Compare CIPS to critical values in Pesaran (2007) Table 2.
 **             Approximate p-values (for reference only) use standard normal.
@@ -30,7 +30,7 @@
 **                     2 = include intercept + trend.
 **
 **  Output:  cips_stat   Scalar CIPS statistic.
-**           cadf_vec    N×1 vector of per-group CADF_i statistics.
+**           cadf_vec    Nx1 vector of per-group CADF_i statistics.
 **
 **  Usage:   { cips, cadf } = cips(data);
 **           { cips, cadf } = cips(data, p, demean);
@@ -61,15 +61,15 @@ proc (2) = cips(data, ...);
         p = __getPT(T);
     endif;
 
-    // Extract the y series (stacked NT×1)
+    // Extract the y series (stacked NTx1)
     y_full = data[., 3];
 
-    // Cross-sectional mean at each time point: T×1 vector
+    // Cross-sectional mean at each time point: Tx1 vector
     ybar_full = aggregate(data[., timevar$|yname], "mean", timevar);
-    ybar_full = ybar_full[., 2];   // T×1 ordered by time
+    ybar_full = ybar_full[., 2];   // Tx1 ordered by time
 
-    // First difference of ybar: T×1 (first obs = missing/0)
-    dybar_full = ybar_full - lagn(ybar_full, 1);   // T×1; first row is missing
+    // First difference of ybar: Tx1 (first obs = missing/0)
+    dybar_full = ybar_full - lagn(ybar_full, 1);   // Tx1; first row is missing
 
     cumtivec = 0|cumsumc(tvec);
     cadf_vec = zeros(n, 1);
@@ -81,8 +81,10 @@ proc (2) = cips(data, ...);
         T_i   = tvec[i];
         y_i   = y_full[r1:r2];
 
-        // Find where this group sits in the common time vector
-        // (for balanced panels all groups span the full T)
+        /*
+        ** Find where this group sits in the common time vector
+        ** (for balanced panels all groups span the full T)
+        */
         agg_tmp = aggregate(data[r1:r2, groupvar$|timevar], "min", groupvar);
         t_s_idx = indnv(agg_tmp[., 2], datevec);
         t_start = t_s_idx[1];          // 1-based index in datevec for group i's first obs
@@ -92,19 +94,23 @@ proc (2) = cips(data, ...);
         ybar_i  = ybar_full[t_start:t_end];
         dybar_i = dybar_full[t_start:t_end];
 
-        // Build CADF(p) regression:
-        //   LHS: Δyᵢₜ
-        //   RHS: intercept [+ trend], yᵢ,ₜ₋₁, ȳₜ₋₁, Δȳₜ, Δȳₜ₋₁, ..., Δȳₜ₋ₚ,
-        //        Δyᵢₜ₋₁, ..., Δyᵢₜ₋ₚ
+        /*
+        ** Build CADF(p) regression:
+        **   LHS: Delta y_it
+        **   RHS: intercept [+ trend], y_i,t-1, ybart-1, Delta ybar_t, Delta ybar_t-1, ..., Delta ybar_t-p,
+        **        Delta y_it-1, ..., Delta y_it-p
+        */
 
         // Differences
-        dy_i = y_i - lagn(y_i, 1);   // T_i×1, first = missing
+        dy_i = y_i - lagn(y_i, 1);   // T_ix1, first = missing
 
-        // Trim: we need p+1 presample obs (1 for dy, p for lags of dy and dybar)
-        // Effective start: row p+2 (1-indexed within group)
+        /*
+        ** Trim: we need p+1 presample obs (1 for dy, p for lags of dy and dybar)
+        ** Effective start: row p+2 (1-indexed within group)
+        */
         p_trim = p + 2;
         if p_trim >= T_i;
-            // Too few obs for this group — skip (set cadf to missing)
+            // Too few obs for this group  --  skip (set cadf to missing)
             cadf_vec[i] = miss();
             continue;
         endif;
@@ -121,18 +127,18 @@ proc (2) = cips(data, ...);
             rhs = rhs ~ seqa(p_trim, 1, T_eff);
         endif;
 
-        // Lagged level: yᵢ,ₜ₋₁
+        // Lagged level: y_i,t-1
         rhs = rhs ~ y_i[p_trim-1:T_i-1];
 
-        // Lagged cross-sectional mean: ȳₜ₋₁
+        // Lagged cross-sectional mean: ybart-1
         rhs = rhs ~ ybar_i[p_trim-1:T_i-1];
 
-        // Contemporaneous and lagged Δȳ: Δȳₜ, Δȳₜ₋₁, ..., Δȳₜ₋ₚ
+        // Contemporaneous and lagged Delta ybar: Delta ybar_t, Delta ybar_t-1, ..., Delta ybar_t-p
         for j(0, p, 1);
             rhs = rhs ~ dybar_i[p_trim-j:T_i-j];
         endfor;
 
-        // Lagged Δyᵢ: Δyᵢ,ₜ₋₁, ..., Δyᵢ,ₜ₋ₚ
+        // Lagged Delta y_i: Delta y_i,t-1, ..., Delta y_i,t-p
         for j(1, p, 1);
             rhs = rhs ~ dy_i[p_trim-j:T_i-j];
         endfor;
@@ -145,8 +151,10 @@ proc (2) = cips(data, ...);
         sig2   = e'e / (T_eff - k_cadf);
         se_b   = sqrt(diag(sig2 * xx_inv));
 
-        // CADF_i = t-ratio on β̂ᵢ (coefficient on yᵢ,ₜ₋₁, which is column 3 or 4)
-        // Column index: 1=const, [2=trend if demean=2], then y_{i,t-1}
+        /*
+        ** CADF_i = t-ratio on beta_hat_i (coefficient on y_i,t-1, which is column 3 or 4)
+        ** Column index: 1=const, [2=trend if demean=2], then y_{i,t-1}
+        */
         if demean == 2;
             beta_col = 3;
         else;
