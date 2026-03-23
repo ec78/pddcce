@@ -1,0 +1,507 @@
+#include cce.sdf
+
+/*
+**> plotResiduals
+**
+**  Post-estimation residual diagnostic plots for any MGOut struct.
+**  Produces a 4-panel figure:
+**    Panel 1 (top-left):  Residuals over observation index (scatter)
+**    Panel 2 (top-right): Histogram of residuals (30 bins)
+**    Panel 3 (bot-left):  Normal Q-Q plot of standardised residuals
+**    Panel 4 (bot-right): Per-group residual standard deviation (bar)
+**
+**  Format:  plotResiduals(mgO)
+**
+**  Input:   mgO     mgOut struct from mg(), cce_mg(), dcce_mg(), or hpj().
+**
+**  Usage:
+**    cceO = cce_mg(data);
+**    plotResiduals(cceO);
+*/
+proc (0) = plotResiduals(struct mgOut mgO);
+    local e, n, e_std, e_sorted, p, q_norm, idx, ref_x, ref_y;
+    struct plotControl plt;
+
+    e   = mgO.e_mg;
+    n   = rows(e);
+
+    // Standardise residuals for Q-Q plot
+    e_std    = (e - meanc(e)) ./ stdc(e);
+    e_sorted = sortc(e_std, 1);
+
+    // Theoretical normal quantiles
+    p      = seqa(1/(n+1), 1/(n+1), n);
+    q_norm = cdfni(p);
+
+    // Observation index for scatter
+    idx = seqa(1, 1, n);
+
+    plotOpenWindow();
+
+    // ---- Panel 1: Residuals over observation index ----
+    plotLayout(2, 2, 1);
+    plt = plotGetDefaults("scatter");
+    plotSetTitle(&plt, mgO.model $+ "\nResiduals over Observations");
+    plotSetXLabel(&plt, "Observation");
+    plotSetYLabel(&plt, "Residual");
+    plotScatter(plt, idx, e);
+
+    // ---- Panel 2: Histogram of residuals ----
+    plotLayout(2, 2, 2);
+    plt = plotGetDefaults("bar");
+    plotSetTitle(&plt, "Residual Distribution");
+    plotSetXLabel(&plt, "Residual");
+    plotSetYLabel(&plt, "Frequency");
+    plotHist(plt, e, 30);
+
+    // ---- Panel 3: Normal Q-Q plot ----
+    plotLayout(2, 2, 3);
+    plt = plotGetDefaults("scatter");
+    plotSetTitle(&plt, "Normal Q-Q Plot (Standardised Residuals)");
+    plotSetXLabel(&plt, "Theoretical Quantiles");
+    plotSetYLabel(&plt, "Sample Quantiles");
+    plotScatter(plt, q_norm, e_sorted);
+
+    // 45-degree reference line through (q_min, q_min) to (q_max, q_max)
+    ref_x = q_norm[1] | q_norm[n];
+    ref_y = q_norm[1] | q_norm[n];
+    plotAddXY(ref_x, ref_y);
+
+    // ---- Panel 4: Per-group residual SD ----
+    plotLayout(2, 2, 4);
+    plt = plotGetDefaults("bar");
+    plotSetTitle(&plt, "Per-Group Residual SD");
+    plotSetXLabel(&plt, "Group");
+    plotSetYLabel(&plt, "Residual SD");
+    plotBar(plt, seqa(1, 1, mgO.ngroups)', mgO.sig_vec');
+
+endp;
+
+
+/*
+**> cce_rank
+**
+**  Tests the rank condition for CCE estimation.
+**
+**  The CCE estimator (Pesaran 2006) is consistent only if the cross-sectional
+**  averages (CSA) matrix Z_bar = [ybar_t, xbar_t] has rank >= m, where m is
+**  the number of unobserved common factors. Since m is unknown, the testable
+**  necessary condition is that Z_bar is full column rank (rank = k+1). Rank
+**  deficiency means the CSA variables are multicollinear and cannot span all
+**  common factors, making CCE estimates inconsistent.
+**
+**  Method follows De Vos, Everaert & Sarafidis (2024) and Margaritella &
+**  Westerlund (2023): compute the singular value decomposition of the (demeaned)
+**  T x (k+1) CSA matrix and report its numerical rank via a tolerance threshold.
+**
+**  Reference:
+**    De Vos, I., Everaert, G. & Sarafidis, V. (2024). A method for evaluating
+**      the rank condition in CCE estimation. Working paper.
+**    Pesaran, M.H. (2006). Estimation and Inference in Large Heterogeneous
+**      Panels with a Multifactor Error Structure. Econometrica, 74(4), 967-1012.
+**    Margaritella, L. & Westerlund, J. (2023). CCE with factor-dependent
+**      loadings. Working paper.
+**
+**  Format:  rankO = cce_rank(data [, mgCtl])
+**
+**  Input:   data      Panel dataframe: [group, time, y, x1, ..., xk].
+**                     Same format as cce_mg().
+**           mgCtl     Optional mgControl struct. If ctl.x_csa is set, those
+**                     additional variables are included in the CSA matrix.
+**                     If ctl.y_var / ctl.x_vars are set, variable selection
+**                     is applied first.
+**
+**  Output:  rankO     cceRankOut struct:
+**             .rank        Estimated rank of the T x (k+1) CSA matrix
+**             .k_csa       Number of CSA columns (k+1)
+**             .sing_vals   (k+1)x1 singular values, sorted descending
+**             .cond_num    Condition number = max(sv)/min(sv)
+**                          miss() when the matrix is numerically rank-deficient
+**             .pass        1 if rank == k_csa (rank condition met), 0 otherwise
+**             .var_names   String array of variable names included in the CSA
+**
+**  Usage:
+**    rankO = cce_rank(data);
+**    print_cce_rank(rankO);
+**
+**    // With extra CSA variable:
+**    ctl = mgControlCreate();
+**    ctl.x_csa = extra_var_column;
+**    rankO = cce_rank(data, ctl);
+*/
+proc (1) = cce_rank(data, ...);
+    local yname, xnames, groupvar, timevar, dname;
+    local data_bar, csa_mat, n_csa, T, sv, rank_est, cond_num, tol;
+    struct cceRankOut rankO;
+
+    struct mgControl ctl_dflt;
+    ctl_dflt = mgControlCreate();
+
+    struct mgControl ctl;
+    ctl = dynargsGet(1, ctl_dflt);
+
+    // Variable selection by name (optional)
+    if ctl.y_var $!= "";
+        data = __selectVars(data, ctl.y_var, ctl.x_vars);
+    endif;
+
+    // Get variable names and panel structure
+    { yname, xnames, groupvar, timevar, dname } = __getnames(data, 0, 0, 0);
+
+    // Compute T x (k+1) cross-sectional averages matrix
+    data_bar = getCSA(data, groupvar, timevar, ctl.x_csa);
+
+    // Columns 3+ are the cross-sectional averages of y and x
+    csa_mat = data_bar[., 3:cols(data_bar)];
+    T       = rows(csa_mat);
+    n_csa   = cols(csa_mat);
+
+    // Demean each column (remove unconditional mean before SVD)
+    csa_mat = csa_mat - ones(T, 1) * meanc(csa_mat)';
+
+    // Singular values (descending order)
+    sv = svd(csa_mat);
+
+    // Numerical rank: count singular values above tolerance
+    // Tolerance: 1e-6 * largest sv (relative to scale of data)
+    tol      = 1e-6 * maxc(sv);
+    rank_est = sumc(sv .> tol);
+
+    // Condition number
+    if minc(sv) > tol;
+        cond_num = maxc(sv) / minc(sv);
+    else;
+        cond_num = miss();
+    endif;
+
+    rankO.rank      = rank_est;
+    rankO.k_csa     = n_csa;
+    rankO.sing_vals = sv;
+    rankO.cond_num  = cond_num;
+    rankO.pass      = (rank_est == n_csa);
+    rankO.var_names = yname $| xnames;
+
+    retp(rankO);
+endp;
+
+
+/*
+**> print_cce_rank
+**
+**  Prints a formatted summary of cce_rank() results.
+**
+**  Format:  print_cce_rank(rankO)
+**
+**  Input:   rankO   cceRankOut struct from cce_rank()
+**
+**  Usage:
+**    rankO = cce_rank(data);
+**    print_cce_rank(rankO);
+*/
+proc (0) = print_cce_rank(struct cceRankOut rankO);
+    local wid, i;
+    wid = 62;
+
+    print chrs(61*ones(wid, 1));
+    print "CCE Rank Condition Test";
+    print "H0: CSA matrix is full column rank (rank condition satisfied)";
+    print "Reference: De Vos, Everaert & Sarafidis (2024)";
+    print chrs(61*ones(wid, 1));
+    sprintf("  %-38s %10d", "CSA variables (k+1):", rankO.k_csa);
+    sprintf("  %-38s %10d", "Estimated rank:", rankO.rank);
+
+    if not ismiss(rankO.cond_num);
+        sprintf("  %-38s %10.2f", "Condition number:", rankO.cond_num);
+    else;
+        sprintf("  %-38s %10s", "Condition number:", "Inf (rank deficient)");
+    endif;
+
+    print chrs(45*ones(wid, 1));
+    print "  Singular values of CSA matrix:";
+    for i(1, rows(rankO.sing_vals), 1);
+        sprintf("    sv[%d]:  %14.6f", i, rankO.sing_vals[i]);
+    endfor;
+
+    print chrs(45*ones(wid, 1));
+
+    if rankO.pass;
+        print "  Result: PASS  -- Rank condition satisfied.";
+        print "  CCE estimation should be consistent.";
+    else;
+        print "  Result: FAIL  -- Rank deficiency detected.";
+        print "  WARNING: CCE estimates may be inconsistent.";
+        print "";
+        print "  Suggested remedies:";
+        print "    1. Add informative variables via mgCtl.x_csa";
+        print "    2. Drop near-collinear CSAs via mgCtl.no_xbar";
+        print "    3. Check for structural breaks or low cross-sectional variation";
+    endif;
+
+    print chrs(61*ones(wid, 1));
+    print "";
+endp;
+
+
+/*
+**> plotCoefficients
+**
+**  Coefficient heterogeneity plot (caterpillar plot) for any mgOut struct.
+**  For each MG regressor, draws per-group estimates sorted in ascending order
+**  with 95% confidence intervals, and overlays the mean group (MG) estimate
+**  as a horizontal reference line.
+**
+**  Useful for detecting outlier groups and assessing how much slope
+**  heterogeneity exists in the sample.
+**
+**  Up to 6 regressors are plotted (one panel each, max 3x2 grid).
+**  If numvars > 6, only the first 6 are shown.
+**
+**  Format:  plotCoefficients(mgO)
+**
+**  Input:   mgO   mgOut struct from mg(), cce_mg(), dcce_mg(), or hpj().
+**
+**  Usage:
+**    cceO = cce_mg(data);
+**    plotCoefficients(cceO);
+*/
+proc (0) = plotCoefficients(struct mgOut mgO);
+    local k0, nv, i, b_col, se_col, idx_sort, b_sorted, se_sorted;
+    local ci_lo, ci_hi, grp_idx, ref_x, ref_y, nr, nc;
+    struct plotControl plt;
+
+    k0 = mgO.numvars;    // MG regressors (excludes CSA augmentation terms)
+    nv = minc(k0|6);     // plot at most 6 panels
+
+    if k0 > 6;
+        print "plotCoefficients: showing first 6 of " $+ itos(k0) $+ " regressors.";
+    endif;
+
+    // Determine subplot grid dimensions
+    if nv == 1;    nr = 1; nc = 1;
+    elseif nv == 2; nr = 1; nc = 2;
+    elseif nv <= 4; nr = 2; nc = 2;
+    else;           nr = 3; nc = 2;
+    endif;
+
+    plotOpenWindow();
+
+    for i(1, nv, 1);
+        b_col  = mgO.b_vec[., i];    // Nx1 per-group estimates
+        se_col = mgO.se[., i];       // Nx1 per-group OLS SEs
+
+        // Sort by coefficient value (ascending caterpillar order)
+        idx_sort  = sortind(b_col);
+        b_sorted  = b_col[idx_sort];
+        se_sorted = se_col[idx_sort];
+
+        ci_lo   = b_sorted - 1.96 .* se_sorted;
+        ci_hi   = b_sorted + 1.96 .* se_sorted;
+        grp_idx = seqa(1, 1, mgO.ngroups);
+
+        plotLayout(nr, nc, i);
+
+        plt = plotGetDefaults("scatter");
+        plotSetTitle(&plt, mgO.mg_vars[i] $+ " -- Group Estimates (sorted)");
+        plotSetXLabel(&plt, "Group rank");
+        plotSetYLabel(&plt, "Coefficient");
+
+        // Point estimates
+        plotScatter(plt, grp_idx, b_sorted);
+
+        // 95% CI lower and upper bounds as separate series
+        plotAddXY(grp_idx, ci_lo);
+        plotAddXY(grp_idx, ci_hi);
+
+        // MG mean estimate as horizontal reference line
+        ref_x = 1 | mgO.ngroups;
+        ref_y = mgO.b_mg[i] * ones(2, 1);
+        plotAddXY(ref_x, ref_y);
+    endfor;
+
+endp;
+
+
+/*
+**> longRunMG
+**
+**  Computes long-run multipliers and delta-method standard errors from a
+**  DCCE-MG estimation that included lagged y (ctl.y_lags >= 1).
+**
+**  The long-run multiplier for regressor j is:
+**
+**    LR_j = beta_j / (1 - sum(phi))
+**
+**  where beta_j is the short-run coefficient on x_j and phi are the
+**  coefficients on lagged y. Standard errors are derived via the delta method
+**  applied to the MG covariance matrix (cov_mg).
+**
+**  Reference:
+**    Pesaran, M.H. & Shin, Y. (1999). An Autoregressive Distributed Lag
+**    Modelling Approach to Cointegration Analysis. In Strom (ed.),
+**    Econometrics and Economic Theory in the 20th Century.
+**
+**  Format:  lrO = longRunMG(mgO)
+**
+**  Input:   mgO     mgOut struct from dcce_mg() with y_lags_used >= 1.
+**
+**  Output:  lrO     longRunOut struct:
+**             .lr_coef    kx1 long-run multipliers
+**             .lr_se      kx1 delta-method standard errors
+**             .lr_tvalue  kx1 t-statistics
+**             .lr_pval    kx1 p-values
+**             .adj_speed  Speed of adjustment = -(1 - sum(phi)) [<0 if convergent]
+**             .x_names    Names of x regressors (matches lr_coef rows)
+**
+**  Usage:
+**    ctl = mgControlCreate();
+**    ctl.y_lags = 1;
+**    cceO = dcce_mg(data, ctl);
+**    lrO  = longRunMG(cceO);
+**    print_longRun(lrO);
+*/
+proc (1) = longRunMG(struct mgOut mgO);
+    local p, k, k_x, phi, beta, sum_phi, rho, lr_coef, lr_se, lr_tval, lr_pval;
+    local grad, j;
+    struct longRunOut lrO;
+
+    p = mgO.y_lags_used;
+    if p == 0;
+        errorlogat "longRunMG: model has no lagged y (y_lags_used = 0)." $+
+                   " Re-estimate with dcce_mg() and ctl.y_lags = 1.";
+        end;
+    endif;
+
+    k   = mgO.numvars;     // total MG regressors: p phi + k_x beta
+    k_x = k - p;           // number of x regressors
+
+    phi     = mgO.b_mg[1:p];      // p x 1  (lagged y coefficients)
+    beta    = mgO.b_mg[p+1:k];    // k_x x 1 (x coefficients)
+    sum_phi = sumc(phi);
+    rho     = 1 - sum_phi;        // denominator: speed-of-adjustment complement
+
+    if abs(rho) < 1e-10;
+        errorlogat "longRunMG: (1 - sum_phi) is near zero -- long-run multipliers undefined.";
+        end;
+    endif;
+
+    lr_coef = beta ./ rho;   // k_x x 1
+
+    // Delta-method SE: grad'*cov_mg*grad for each LR coefficient
+    lr_se = zeros(k_x, 1);
+    for j(1, k_x, 1);
+        grad = zeros(k, 1);
+        grad[1:p]  = beta[j] / (rho^2);   // d/d(phi_i): beta_j / rho^2
+        grad[p+j]  = 1 / rho;             // d/d(beta_j): 1 / rho
+        lr_se[j] = sqrt(grad' * mgO.cov_mg * grad);
+    endfor;
+
+    lr_tval = lr_coef ./ lr_se;
+    lr_pval = 2 * cdftc(lr_tval, mgO.df_csa);
+
+    lrO.lr_coef   = lr_coef;
+    lrO.lr_se     = lr_se;
+    lrO.lr_tvalue = lr_tval;
+    lrO.lr_pval   = lr_pval;
+    lrO.adj_speed = sum_phi - 1;           // negative if model converges
+    lrO.x_names   = mgO.mg_vars[p+1:k];
+
+    retp(lrO);
+endp;
+
+
+/*
+**> print_longRun
+**
+**  Prints a formatted table of long-run multipliers from longRunMG().
+**
+**  Format:  print_longRun(lrO)
+**
+**  Input:   lrO   longRunOut struct from longRunMG().
+**
+**  Usage:
+**    lrO = longRunMG(cceO);
+**    print_longRun(lrO);
+*/
+proc (0) = print_longRun(struct longRunOut lrO);
+    local wid, k, i, fmt_h, fmt_r;
+
+    wid   = 74;
+    fmt_h = "  %-22s %12s %12s %12s %12s";
+    fmt_r = "  %-22s %12.6f %12.6f %12.6f %12.6f";
+    k     = rows(lrO.lr_coef);
+
+    print chrs(61*ones(wid, 1));
+    print "Long-Run Multipliers  (DCCE-MG, delta-method SE)";
+    print chrs(61*ones(wid, 1));
+    sprintf("  %-38s %10.4f", "Speed of adjustment (sum_phi - 1):", lrO.adj_speed);
+    print "  (Negative value indicates mean-reverting dynamics)";
+    print chrs(45*ones(wid, 1));
+    sprintf(fmt_h, "Variable", "LR Coef.", "SE", "t", "P >|t|");
+    print chrs(45*ones(wid, 1));
+    for i(1, k, 1);
+        sprintf(fmt_r, lrO.x_names[i],
+                lrO.lr_coef[i], lrO.lr_se[i], lrO.lr_tvalue[i], lrO.lr_pval[i]);
+    endfor;
+    print chrs(61*ones(wid, 1));
+    print "";
+endp;
+
+
+/*
+**> plotResidualACF
+**
+**  Plots the sample autocorrelation function (ACF) of the pooled residuals
+**  from any mgOut struct, with 95% significance bands (+/- 1.96/sqrt(N)).
+**
+**  The ACF is computed on pooled (stacked) residuals from mgO.e_mg, which
+**  mixes within-group autocorrelation with cross-group structure. For a
+**  per-group ACF average, use mgO.b_vec residuals instead (not implemented here).
+**
+**  Format:  plotResidualACF(mgO [, maxlag])
+**
+**  Input:   mgO     mgOut struct from mg(), cce_mg(), dcce_mg(), or hpj().
+**           maxlag  Optional. Maximum lag order to display. Default 20.
+**
+**  Usage:
+**    cceO = cce_mg(data);
+**    plotResidualACF(cceO);
+**    plotResidualACF(cceO, 30);   // show up to lag 30
+*/
+proc (0) = plotResidualACF(struct mgOut mgO, ...);
+    local maxlag, e, n, acf, k, ee, denom, conf_band, lag_idx;
+    struct plotControl plt;
+
+    maxlag = dynargsGet(1, 20);
+
+    e   = mgO.e_mg;
+    n   = rows(e);
+
+    // Demean residuals
+    e = e - meanc(e);
+    denom = e'e;
+
+    // Compute sample ACF at lags 0, 1, ..., maxlag
+    acf    = zeros(maxlag+1, 1);
+    acf[1] = 1;    // lag 0 = 1 by definition
+    for k(1, maxlag, 1);
+        ee      = e[k+1:n] .* e[1:n-k];
+        acf[k+1] = sumc(ee) / denom;
+    endfor;
+
+    // 95% significance bands: +/- 1.96 / sqrt(n)
+    conf_band = 1.96 / sqrt(n);
+    lag_idx   = seqa(0, 1, maxlag+1);
+
+    plotOpenWindow();
+
+    plt = plotGetDefaults("bar");
+    plotSetTitle(&plt, mgO.model $+ "\nResidual ACF (Pooled)");
+    plotSetXLabel(&plt, "Lag");
+    plotSetYLabel(&plt, "Autocorrelation");
+    plotBar(plt, lag_idx', acf');
+
+    // Upper and lower 95% confidence bands
+    plotAddXY(lag_idx[1]|lag_idx[maxlag+1],  conf_band * ones(2, 1));
+    plotAddXY(lag_idx[1]|lag_idx[maxlag+1], -conf_band * ones(2, 1));
+
+endp;

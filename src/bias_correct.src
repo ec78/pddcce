@@ -30,11 +30,11 @@
 **                           .b_mg   = HPJ bias-corrected MG estimate
 **                           .se_mg  = NP SE from full-sample (conservative)
 **                           .tvalue, .pval, .ci recomputed from HPJ b_mg
-**                           .b_mg_full  = original (uncorrected) full-sample b_mg
-**                           .b_mg_h1    = first-half estimate
-**                           .b_mg_h2    = second-half estimate
-**
-**  Note: b_mg_full, b_mg_h1, b_mg_h2 are stored in .b_stats columns 1-3 for access.
+**                           .b_stats_hpj = kx4 matrix [b_full, b_h1, b_h2, b_hpj]
+**                             col 1: full-panel estimate
+**                             col 2: first-half estimate
+**                             col 3: second-half estimate
+**                             col 4: HPJ bias-corrected estimate
 **
 **  Usage:
 **    struct mgControl ctl;
@@ -93,10 +93,11 @@ proc (1) = hpj(data, struct mgControl ctl, ...);
     hpjO.ci         = b_hpj - 1.96*mgO_full.se_mg[1:k] ~ b_hpj + 1.96*mgO_full.se_mg[1:k];
 
     /*
-    ** Store all three estimates in b_stats for easy access:
+    ** Store HPJ intermediate estimates in b_stats_hpj (dedicated field):
     **   col 1: full-panel b_mg, col 2: first-half, col 3: second-half, col 4: HPJ
+    ** b_stats keeps its standard [min, mean, max, sd] meaning from the full-sample run.
     */
-    hpjO.b_stats = b_full ~ b_h1 ~ b_h2 ~ b_hpj;
+    hpjO.b_stats_hpj = b_full ~ b_h1 ~ b_h2 ~ b_hpj;
     hpjO.model   = mgO_full.model $+ " [HPJ Bias-Corrected]";
 
     // Rebuild output table with HPJ estimates
@@ -158,9 +159,23 @@ endp;
 
 /*
 ** __mg_call   --   Dispatch helper: calls mg, cce_mg, or dcce_mg by name.
+**
+** Validates estimator_type before dispatching. Valid values (case-sensitive):
+**   "mg"       Plain Mean Group estimator (no CSA correction)
+**   "cce_mg"   CCE Mean Group (default)
+**   "dcce_mg"  Dynamic CCE Mean Group (adds lagged y and CSA lags)
 */
 proc (1) = __mg_call(data, struct mgControl ctl, estimator_type);
+    local valid_types;
     struct mgOut mgO;
+
+    valid_types = "mg" $| "cce_mg" $| "dcce_mg";
+    if not any(valid_types $== estimator_type);
+        errorlogat "estimator_type '" $+ estimator_type $+ "' is not valid." $+
+                   " Must be one of: 'mg', 'cce_mg', 'dcce_mg'.";
+        end;
+    endif;
+
     if estimator_type $== "mg";
         mgO = mg(data, ctl);
     elseif estimator_type $== "dcce_mg";

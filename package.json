@@ -23,7 +23,9 @@
         "cips.src",
         "latex_export.src",
         "bootstrap.src",
-        "bias_correct.src"
+        "bias_correct.src",
+        "diagnostics.src",
+        "westerlund.src"
     ],
-    "version": "1.0.0"
+    "version": "1.2.0"
 }

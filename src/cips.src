@@ -208,3 +208,45 @@ proc (0) = print_cips(cips_stat, cadf_vec, p, demean);
     print chrs(61*ones(wid, 1));
     print "";
 endp;
+
+
+/*
+**> cips_test
+**
+**  Wrapper around cips() that returns a cipsOut struct instead of two separate
+**  scalars. Useful when you want to store and pass around CIPS results as a
+**  single object, or when the two-value return of cips() is inconvenient.
+**
+**  Format:  cO = cips_test(data [, p, demean])
+**
+**  Input / Output:  Same as cips(). See cips() documentation for details.
+**
+**  Output:  cO   cipsOut struct:
+**             .cips_stat   CIPS statistic
+**             .cadf_vec    Nx1 per-group CADF t-statistics
+**             .p           Lag order used
+**             .demean      Deterministic specification (1 or 2)
+**
+**  Usage:
+**    cO = cips_test(data[., "id" "year" "log_rgdpo"]);
+**    print_cips(cO.cips_stat, cO.cadf_vec, cO.p, cO.demean);
+*/
+proc (1) = cips_test(data, ...);
+    local p, demean;
+    struct cipsOut cO;
+
+    { p, demean } = dynargsGet(1|2, 0, 1);
+
+    { cO.cips_stat, cO.cadf_vec } = cips(data, p, demean);
+
+    // Recover actual lag order used (cips() applies automatic selection when p=0)
+    if p == 0;
+        cO.p = __getPT(rows(unique(data[., 2])));
+    else;
+        cO.p = p;
+    endif;
+
+    cO.demean = demean;
+
+    retp(cO);
+endp;

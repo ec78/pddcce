@@ -10,6 +10,11 @@ matrix report;
 matrix pooled;      // 1 = also run pooled CCE (pcceNW). Default 0.
 matrix i1;          // 1 = add first-differenced CSA (KPY 2011, for I(1) regressors). Default 0.
 matrix two_way;     // 1 = time-demean data before CCE (two-way CCE with time FE). Default 0.
+string y_var;           // Name of dependent variable column. Default "" (use column 3).
+string array x_vars;    // Names of regressor columns. Default "" (use columns 4+).
+string array no_xbar_names; // Variable names to exclude from CSA. Alternative to no_xbar
+                            // (which takes numeric column indices). Example:
+                            // ctl.no_xbar_names = "log_ck" $| "log_hc";
 };
 
 struct pcceNWOut {
@@ -51,6 +56,14 @@ matrix cd_stat;
 matrix cd_pval;
 matrix R_sq;           // Mean within-group R^2 (averaged across groups)
 
+// Model fit statistics (for comparison across lag specifications)
+scalar loglik;          // Total log-likelihood across all groups (assuming normal errors)
+scalar aic;             // AIC = -2*loglik + 2*(n*k_reg)
+scalar bic;             // BIC = -2*loglik + log(nobs)*(n*k_reg)
+
+// Dynamic model metadata
+scalar y_lags_used;     // Number of lagged y included (from ctl.y_lags); 0 for MG/CCE-MG
+
 // Model estimates
 matrix b_vec;          // nxk individual group estimates
 matrix b_mg;           // kx1 mean group estimates
@@ -62,6 +75,10 @@ matrix pval;           // kx1 p-values
 matrix out_mg;         // formatted output dataframe
 matrix ci;             // kx2 95% confidence intervals [lb, ub]
 matrix b_stats;        // kx4 heterogeneity table: [min, mean, max, sd] across groups
+                       // NOTE: hpj() replaces this with [b_full, b_h1, b_h2, b_hpj] — use
+                       // b_stats_hpj instead, which always carries the HPJ intermediate results.
+matrix b_stats_hpj;    // kx4 HPJ intermediate estimates: [full, h1, h2, hpj]. Only populated
+                       // by hpj(); empty (scalar 0) for all other estimators.
 
 matrix xxi;            // kxk (X'X) for last group (legacy)
 matrix xxi_vec;        // nxk^2 per-group X'X matrices (row-vectorised); used by slopehomo
@@ -81,6 +98,68 @@ matrix cd_nt;
 matrix pvalue_cd_nt;
 matrix meanrho;
 matrix used;
+};
+
+
+/*
+** longRunOut -- Output from longRunMG().
+** Long-run multiplier estimates derived from a DCCE-MG result with y_lags > 0.
+*/
+struct longRunOut {
+matrix lr_coef;         // kx1 long-run multipliers: beta / (1 - sum(phi))
+matrix lr_se;           // kx1 delta-method standard errors
+matrix lr_tvalue;       // kx1 t-statistics
+matrix lr_pval;         // kx1 p-values
+scalar adj_speed;       // Implied speed of adjustment: -(1 - sum(phi))
+string array x_names;   // Names of x regressors (matches lr_coef rows)
+};
+
+
+/*
+** cipsOut -- Output from cips_test().
+** Wraps the two return values of cips() into a single struct for convenience.
+*/
+struct cipsOut {
+scalar cips_stat;   // CIPS panel unit root statistic (mean of group CADF t-ratios)
+matrix cadf_vec;    // Nx1 vector of per-group CADF t-statistics
+scalar p;           // Lag order used
+scalar demean;      // Deterministic spec: 1 = intercept, 2 = intercept+trend
+};
+
+
+/*
+** cceRankOut -- Output from cce_rank().
+** Stores rank condition test results for the CSA matrix.
+*/
+struct cceRankOut {
+scalar rank;            // Estimated rank of the T x (k+1) CSA matrix
+scalar k_csa;           // Number of CSA columns (k+1)
+matrix sing_vals;       // (k+1)x1 sorted singular values (largest first)
+scalar cond_num;        // Condition number = max(sv)/min(sv); miss() if rank deficient
+scalar pass;            // 1 if rank == k_csa (rank condition satisfied), 0 otherwise
+string array var_names; // Names of variables included in CSA (y and x)
+};
+
+
+/*
+** westerlundOut -- Output from westerlundTest().
+** Westerlund (2007) ECM-based panel cointegration test statistics.
+**
+** All four statistics test H0: no cointegration (alpha_i = 0 for all i).
+** The group-mean statistics (Gt, Ga) test H1: at least one i is cointegrated.
+** The panel statistics (Pt, Pa) test H1: the panel as a whole is cointegrated.
+** Reject H0 when the statistic is smaller than the critical value (left-tailed).
+*/
+struct westerlundOut {
+scalar Gt;          // Group-mean tau: (1/N) * sum_i [alpha_i / SE(alpha_i)]
+scalar Ga;          // Group-mean alpha: (1/N) * sum_i [T_i * alpha_i]
+scalar Pt;          // Panel tau: precision-weighted pooled alpha / SE
+scalar Pa;          // Panel alpha: T_bar * precision-weighted pooled alpha
+matrix alpha_vec;   // Nx1 per-group speed-of-adjustment estimates (alpha_i)
+matrix se_vec;      // Nx1 per-group SE of alpha_i
+scalar p;           // Lag order used in ECM regressions
+scalar demean;      // Deterministic spec: 1 = intercept, 2 = intercept + trend
+scalar n_valid;     // Number of groups with sufficient observations
 };
 
 

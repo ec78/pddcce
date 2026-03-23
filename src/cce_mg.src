@@ -46,6 +46,11 @@ proc(1) = dcce_mg(data, ...);
     struct mgControl ctl;
     ctl = dynargsGet(1, mgCtl_dflt);
 
+    // Variable selection by name (optional: reorder columns to [group, time, y, x...])
+    if ctl.y_var $!= "";
+        data = __selectVars(data, ctl.y_var, ctl.x_vars);
+    endif;
+
     // Get variable names
     { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
 
@@ -53,7 +58,7 @@ proc(1) = dcce_mg(data, ...);
     isbalanced = __pdbalanced(data[., groupvar]);
 
     // Check for missing values
-    if ismiss(data) .== miss();
+    if sumc(sumc(ismiss(data)));
         errorlogat "'dcce_mg': Missing Data Somewhere! This code does not allow it.";
         end;
     endif;
@@ -93,6 +98,11 @@ proc(1) = dcce_mg(data, ...);
         tvec      = tvec - 1;
         miny      = miny + 1;
         maxt      = maxt - 1;
+    endif;
+
+    // no_xbar_names: convert variable names to numeric column indices for __delXBars
+    if not (rows(ctl.no_xbar_names) == 1 and ctl.no_xbar_names $== "");
+        ctl.no_xbar = __getNoXbarIndices(data, ctl.no_xbar_names);
     endif;
 
     // Cross-section averages
@@ -156,12 +166,13 @@ proc(1) = dcce_mg(data, ...);
     cceO.panel_var = groupvar;
     cceO.time_var  = timevar;
     cceO.ngroups   = n;
-    cceO.model     = "Dynamic Common Correlated Effects Mean Group Estimator";
-    cceO.numvars   = cols(x);
-    cceO.df        = cceO.obs_grp - cceO.numvars;
-    cceO.y_varname = yname;
-    cceO.mg_vars   = (xnames'$~hname)';
-    cceO.csa_vars  = csa_vars;
+    cceO.model       = "Dynamic Common Correlated Effects Mean Group Estimator";
+    cceO.numvars     = cols(x);
+    cceO.y_lags_used = ctl.y_lags;
+    cceO.df          = cceO.obs_grp - cceO.numvars;
+    cceO.y_varname   = yname;
+    cceO.mg_vars     = (xnames'$~hname)';
+    cceO.csa_vars    = csa_vars;
 
     // Pooled CCE (optional)
     if ctl.pooled;
@@ -197,9 +208,14 @@ proc(1) = mg(data, ...);
     struct mgControl ctl;
     ctl = dynargsGet(1, mgCtl_dflt);
 
+    // Variable selection by name (optional: reorder columns to [group, time, y, x...])
+    if ctl.y_var $!= "";
+        data = __selectVars(data, ctl.y_var, ctl.x_vars);
+    endif;
+
     { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
 
-    if ismiss(data) .== miss();
+    if sumc(sumc(ismiss(data)));
         errorlogat "'mg': Missing Data Somewhere! This code does not allow it.";
         end;
     endif;
@@ -277,9 +293,14 @@ proc(1) = cce_mg(data, ...);
     struct mgControl ctl;
     ctl = dynargsGet(1, mgCtl_dflt);
 
+    // Variable selection by name (optional: reorder columns to [group, time, y, x...])
+    if ctl.y_var $!= "";
+        data = __selectVars(data, ctl.y_var, ctl.x_vars);
+    endif;
+
     { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
 
-    if ismiss(data) .== miss();
+    if sumc(sumc(ismiss(data)));
         errorlogat "'cce_mg': Missing Data Somewhere! This code does not allow it.";
         end;
     endif;
@@ -294,6 +315,11 @@ proc(1) = cce_mg(data, ...);
         if ctl.x_csa != 0;
             ctl.x_csa = __timedemean_xcsa(ctl.x_csa, data[., timevar]);
         endif;
+    endif;
+
+    // no_xbar_names: convert variable names to numeric column indices for __delXBars
+    if not (rows(ctl.no_xbar_names) == 1 and ctl.no_xbar_names $== "");
+        ctl.no_xbar = __getNoXbarIndices(data, ctl.no_xbar_names);
     endif;
 
     // Cross-section averages
@@ -479,7 +505,22 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
     ** Heterogeneity table: kx4 [min, mean, max, sd]
     ** Only for MG variables (first numvars cols; b_vec may include CSA cols)
     */
-    mgO.b_stats = minc(b_vec)' ~ meanc(b_vec)' ~ maxc(b_vec)' ~ stdc(b_vec)';
+    mgO.b_stats     = minc(b_vec)' ~ meanc(b_vec)' ~ maxc(b_vec)' ~ stdc(b_vec)';
+    mgO.b_stats_hpj = 0;     // populated only by hpj()
+    mgO.y_lags_used = 0;     // populated by dcce_mg() after _mg() returns
+
+    /*
+    ** Log-likelihood, AIC, BIC (assuming normal errors within each group).
+    ** LL_i = -(T_i/2)*log(2*pi) - (T_i/2)*log(sig_i^2) - (T_i-k)/2
+    ** AIC = -2*LL + 2*(n*k); BIC = -2*LL + log(NT)*n*k
+    */
+    local ll_vec, ll_tot, npar;
+    ll_vec  = -(tivec/2) .* log(2*pi) - (tivec/2) .* log(sig_vec.^2) - (tivec-k)/2;
+    ll_tot  = sumc(ll_vec);
+    npar    = n * k;
+    mgO.loglik = ll_tot;
+    mgO.aic    = -2*ll_tot + 2*npar;
+    mgO.bic    = -2*ll_tot + log(rows(e_mg)) * npar;
 
     // Output dataframe
     out_mg    = asDF(namevar[2:rows(namevar)], "y") ~

@@ -11,7 +11,7 @@ The library provides three main estimators plus companion diagnostic and inferen
 **Author:** Eric Clower, Aptech Systems, Inc. (`eric@aptech.com`)
 **Target:** GAUSS 23+
 **License:** Non-commercial public use only
-**Package version:** 0.3.0
+**Package version:** 1.1.0
 
 ---
 
@@ -21,16 +21,17 @@ The library provides three main estimators plus companion diagnostic and inferen
 pddcce/
 ├── CLAUDE.md               # This file
 ├── README.md               # User-facing overview
-├── package.json            # GAUSS package manifest (name: dccelib, version: 0.2.0)
+├── package.json            # GAUSS package manifest (name: dccelib, version: 1.1.0)
 ├── src/
-│   ├── cce.sdf             # Structure definitions (mgControl, mgOut, cdOut, pcceNWOut)
+│   ├── cce.sdf             # Structure definitions (mgControl, mgOut, cdOut, pcceNWOut, cceRankOut)
 │   ├── cce_mg.src          # MG, CCE-MG, DCCE-MG estimators + pcceNW + cdtest
-│   ├── dcceutil.src        # Utility procedures, printing, coeftable()
+│   ├── dcceutil.src        # Utility procedures, printing, coeftable(), __selectVars()
 │   ├── slopehomo.src       # Pesaran-Yamagata (2008) slope homogeneity tests
 │   ├── cips.src            # Pesaran (2007) CIPS panel unit root test
 │   ├── latex_export.src    # LaTeX table export (single and multi-model)
 │   ├── bootstrap.src       # Wild bootstrap standard errors for MG estimators
-│   └── bias_correct.src    # Half-panel jackknife (HPJ) bias correction
+│   ├── bias_correct.src    # Half-panel jackknife (HPJ) bias correction
+│   └── diagnostics.src     # plotResiduals(), cce_rank(), print_cce_rank()
 ├── docs/
 │   ├── api_reference.md    # Full public API reference
 │   ├── blog_outline.md     # Medium blog post outline
@@ -93,6 +94,8 @@ Key GAUSS conventions used in this codebase:
 | `pooled` | 0 | 1 = also run pooled CCE (`pcceNW`) |
 | `i1` | 0 | 1 = add first-differenced CSA (KPY 2011; for I(1) regressors) |
 | `two_way` | 0 | 1 = time-demean data before CCE (two-way CCE with time FE) |
+| `y_var` | `""` | Name of dependent variable column. If set, columns are automatically reordered. |
+| `x_vars` | `""` | Name(s) of regressor columns (`"x1" $\| "x2"`). Used with `y_var`. |
 
 ### `mgOut` — Results output structure
 | Member | Description |
@@ -142,7 +145,7 @@ Key GAUSS conventions used in this codebase:
 | `coeftable(mgO)` | Return k×4 numeric matrix [coef, se, t, p] |
 | `__print_mg_output(mgO)` | Print formatted results table |
 
-### Diagnostics & tests (`src/slopehomo.src`, `src/cips.src`)
+### Diagnostics & tests (`src/slopehomo.src`, `src/cips.src`, `src/diagnostics.src`)
 
 | Procedure | Description |
 |-----------|-------------|
@@ -150,6 +153,9 @@ Key GAUSS conventions used in this codebase:
 | `print_slopehomo(delta, pval, delta_adj, pval_adj)` | Print slope homogeneity results |
 | `cips(data, [p, demean])` | Pesaran (2007) CIPS panel unit root test |
 | `print_cips(cips_stat, cadf_vec, p, demean)` | Print CIPS results |
+| `plotResiduals(mgO)` | 4-panel residual diagnostic plot (scatter, histogram, Q-Q, per-group SD) |
+| `cce_rank(data, [mgCtl])` | Rank condition test for CCE (De Vos et al. 2024): checks CSA matrix rank |
+| `print_cce_rank(rankO)` | Print formatted rank condition test results |
 
 ### Bias correction (`src/bias_correct.src`)
 
@@ -183,6 +189,16 @@ All estimator procedures expect `data` in this column order:
 4. **Independent variables (x)** — columns 4+
 
 Sort by group then time. Use `packr()` to remove missing rows before calling.
+
+**Alternative: specify variables by name** using `mgControl.y_var` and `mgControl.x_vars`.
+The library will reorder columns automatically before estimation:
+
+```gauss
+ctl = mgControlCreate();
+ctl.y_var  = "log_rgdpo";
+ctl.x_vars = "log_ck" $| "log_ngd";
+cceO = cce_mg(mydata, ctl);   // columns can be in any order
+```
 
 ---
 

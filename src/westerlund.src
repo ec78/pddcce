@@ -1,0 +1,240 @@
+#include cce.sdf
+
+/*
+**> westerlundTest
+**
+**  Westerlund (2007) ECM-based panel cointegration test.
+**
+**  Reference:
+**    WESTERLUND, J. (2007), TESTING FOR ERROR CORRECTION IN PANEL DATA,
+**    OXFORD BULLETIN OF ECONOMICS AND STATISTICS, 69(6), 709-748.
+**
+**  Tests H0: no cointegration in the panel (alpha_i = 0 for all i).
+**  For each group i, estimates the ECM regression:
+**
+**    Delta y_it = c_i [+ trend_i] + alpha_i * y_{i,t-1} + theta_i' * x_{i,t-1}
+**               + sum_{j=1}^{p} phi_{ij} * Delta y_{i,t-j}
+**               + sum_{j=0}^{p} gamma_{ij}' * Delta x_{i,t-j} + e_it
+**
+**  The alpha_i coefficient is the speed-of-adjustment parameter.
+**  Under cointegration, alpha_i < 0.
+**
+**  Four test statistics are reported:
+**    Gt = (1/N) * sum_i [alpha_i / SE(alpha_i)]      Group-mean tau
+**    Ga = (1/N) * sum_i [T_i * alpha_i]              Group-mean alpha (T-scaled)
+**    Pt = alpha_P / SE(alpha_P)                       Pooled tau (precision-wtd)
+**    Pa = T_bar * alpha_P                             Pooled alpha (T-scaled)
+**
+**  All four statistics are left-tailed: reject H0 when statistic < critical value.
+**  Compare to Westerlund (2007) Table 1 for exact critical values (function of N, T, p).
+**
+**  Format:  wO = westerlundTest(data [, p, demean])
+**
+**  Input:   data      Panel dataframe. Columns: [id, time, y, x1, ..., xk].
+**           p         Lag order. Default 0 = auto via floor(T^(1/3)).
+**           demean    1 = intercept (default). 2 = intercept + trend.
+**
+**  Output:  wO        westerlundOut struct. Use print_westerlund(wO) to display.
+**
+**  Usage:
+**    wO = westerlundTest(data);
+**    print_westerlund(wO);
+**
+**    // With lags and trend:
+**    wO = westerlundTest(data, 2, 2);
+**    print_westerlund(wO);
+*/
+proc (1) = westerlundTest(data, ...);
+    local p, demean;
+    local varnames, groupvar, timevar;
+    local idvec, tvec, n, cumtivec, T_bar;
+    local p_act, k;
+    local i, r1, r2, T_i, T_eff, trim_start;
+    local y_i, x_i, dy_i, dx_i, y_lag_i, x_lag_i;
+    local lhs, rhs, j, k_ecm, xx_inv, b_ols, e_ols, sig2, se_b;
+    local alpha_col;
+    local alpha_vec, se_vec, tau_vec;
+    local valid, alpha_v, se_v, tau_v, n_valid;
+    local Gt, Ga, Pt, Pa, prec_sum, alpha_P, se_P;
+    struct westerlundOut wO;
+
+    { p, demean } = dynargsGet(1|2, 0, 1);
+
+    varnames = getcolnames(data);
+    { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+
+    idvec    = unique(data[., groupvar]);
+    tvec     = counts(data[., groupvar], idvec);
+    n        = rows(idvec);
+    cumtivec = 0|cumsumc(tvec);
+    T_bar    = meanc(tvec);
+    k        = cols(data) - 3;   // number of x regressors
+
+    // Auto lag selection: Andrews (1991) rule
+    if p == 0;
+        p_act = __getPT(T_bar);
+    else;
+        p_act = p;
+    endif;
+
+    // Column index of y_{i,t-1} in the RHS matrix:
+    //   col 1 = intercept; col 2 = trend (optional); then y_{t-1}
+    alpha_col = 1 + (demean >= 1) + (demean == 2);
+
+    alpha_vec = zeros(n, 1);
+    se_vec    = zeros(n, 1);
+    tau_vec   = zeros(n, 1);
+
+    for i(1, n, 1);
+
+        r1  = cumtivec[i]+1;
+        r2  = cumtivec[i+1];
+        T_i = tvec[i];
+
+        // Minimum obs for a valid regression
+        if T_i < p_act + k + 4;
+            alpha_vec[i] = miss();
+            se_vec[i]    = miss();
+            tau_vec[i]   = miss();
+            continue;
+        endif;
+
+        y_i = data[r1:r2, 3];
+
+        // First differences and lagged levels
+        dy_i    = y_i - lagn(y_i, 1);
+        y_lag_i = lagn(y_i, 1);
+
+        if k > 0;
+            x_i     = data[r1:r2, 4:cols(data)];
+            dx_i    = x_i - lagn(x_i, 1);
+            x_lag_i = lagn(x_i, 1);
+        endif;
+
+        // Trim: need p_act+1 presample observations (1 for the diff, p_act for lags)
+        trim_start = p_act + 2;
+        T_eff      = T_i - trim_start + 1;
+
+        lhs = dy_i[trim_start:T_i];
+
+        // RHS: intercept
+        rhs = ones(T_eff, 1);
+
+        // Optional linear trend
+        if demean == 2;
+            rhs = rhs ~ seqa(trim_start, 1, T_eff);
+        endif;
+
+        // Lagged level y_{i,t-1}  <-- alpha_i estimated here
+        rhs = rhs ~ y_lag_i[trim_start:T_i];
+
+        // Lagged level x_{i,t-1} (k columns)
+        if k > 0;
+            rhs = rhs ~ x_lag_i[trim_start:T_i, .];
+        endif;
+
+        // Lagged differences of y: Delta y_{i,t-1}, ..., Delta y_{i,t-p}
+        for j(1, p_act, 1);
+            rhs = rhs ~ dy_i[trim_start-j:T_i-j];
+        endfor;
+
+        // Contemporaneous and lagged differences of x: Delta x_{i,t}, ..., Delta x_{i,t-p}
+        if k > 0;
+            for j(0, p_act, 1);
+                rhs = rhs ~ dx_i[trim_start-j:T_i-j, .];
+            endfor;
+        endif;
+
+        // OLS
+        k_ecm  = cols(rhs);
+        xx_inv = pinv(rhs'rhs);
+        b_ols  = xx_inv * (rhs'lhs);
+        e_ols  = lhs - rhs*b_ols;
+        sig2   = e_ols'e_ols / (T_eff - k_ecm);
+        se_b   = sqrt(diag(sig2 * xx_inv));
+
+        alpha_vec[i] = b_ols[alpha_col];
+        se_vec[i]    = se_b[alpha_col];
+        tau_vec[i]   = b_ols[alpha_col] / se_b[alpha_col];
+
+    endfor;
+
+    // Drop groups where obs were insufficient
+    valid   = not ismiss(alpha_vec);
+    alpha_v = selif(alpha_vec, valid);
+    se_v    = selif(se_vec, valid);
+    tau_v   = selif(tau_vec, valid);
+    n_valid = rows(alpha_v);
+
+    // Westerlund (2007) test statistics
+    Gt = meanc(tau_v);                                      // Group-mean tau
+    Ga = meanc(selif(tvec, valid) .* alpha_v);              // (1/N) sum T_i * alpha_i
+
+    // Precision-weighted pooled estimator (for Pt and Pa)
+    prec_sum = sumc(se_v.^(-2));
+    alpha_P  = sumc(se_v.^(-2) .* alpha_v) / prec_sum;
+    se_P     = 1 / sqrt(prec_sum);
+    Pt       = alpha_P / se_P;     // Panel tau
+    Pa       = T_bar * alpha_P;    // Panel alpha (T-scaled)
+
+    wO.Gt        = Gt;
+    wO.Ga        = Ga;
+    wO.Pt        = Pt;
+    wO.Pa        = Pa;
+    wO.p         = p_act;
+    wO.demean    = demean;
+    wO.alpha_vec = alpha_vec;
+    wO.se_vec    = se_vec;
+    wO.n_valid   = n_valid;
+
+    retp(wO);
+endp;
+
+
+/*
+**> print_westerlund
+**
+**  Prints a formatted summary of westerlundTest() results.
+**
+**  Format:  print_westerlund(wO)
+**
+**  Input:   wO   westerlundOut struct from westerlundTest().
+**
+**  Usage:
+**    wO = westerlundTest(data);
+**    print_westerlund(wO);
+*/
+proc (0) = print_westerlund(struct westerlundOut wO);
+    local wid;
+    wid = 70;
+
+    print chrs(61*ones(wid, 1));
+    print "Westerlund (2007) Panel Cointegration Test";
+    print "H0: No cointegration  (alpha_i = 0 for all i)";
+    print "Reference: Westerlund (2007), Oxford Bull Econ Stat 69(6), 709-748";
+    print chrs(61*ones(wid, 1));
+    sprintf("  %-34s %d", "Groups used:", wO.n_valid);
+    sprintf("  %-34s %d", "Lag order (p):", wO.p);
+    if wO.demean == 2;
+        sprintf("  %-34s %s", "Deterministics:", "Intercept + Trend");
+    else;
+        sprintf("  %-34s %s", "Deterministics:", "Intercept only");
+    endif;
+    print chrs(45*ones(wid, 1));
+    sprintf("  %-36s %12s", "Statistic", "Value");
+    print chrs(45*ones(wid, 1));
+    sprintf("  %-36s %12.4f", "Gt  (group-mean tau):", wO.Gt);
+    sprintf("  %-36s %12.4f", "Ga  (group-mean alpha, T-scaled):", wO.Ga);
+    sprintf("  %-36s %12.4f", "Pt  (panel tau, pooled):", wO.Pt);
+    sprintf("  %-36s %12.4f", "Pa  (panel alpha, T-scaled):", wO.Pa);
+    print chrs(45*ones(wid, 1));
+    print "  Note: All tests are left-tailed -- reject H0 when stat < CV.";
+    print "  Compare to Westerlund (2007) Table 1 critical values";
+    print "  (function of N, T, p, and deterministic specification).";
+    print "  Gt/Ga: H1 = at least one group is cointegrated.";
+    print "  Pt/Pa: H1 = the panel as a whole is cointegrated.";
+    print "  IMPORTANT: Standard CVs assume cross-sectional independence.";
+    print "  For CCE residuals, bootstrap p-values via mgBootstrap() are preferred.";
+    print chrs(61*ones(wid, 1));
+    print "";
+endp;

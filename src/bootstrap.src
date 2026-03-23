@@ -58,14 +58,8 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
     ctl_boot = ctl;
     ctl_boot.report = 0;
 
-    // Get original estimates to extract per-group b_hat_i and e_i
-    if estimator_type $== "mg";
-        mgO_orig = mg(data, ctl_boot);
-    elseif estimator_type $== "dcce_mg";
-        mgO_orig = dcce_mg(data, ctl_boot);
-    else;
-        mgO_orig = cce_mg(data, ctl_boot);   // default
-    endif;
+    // Get original estimates (validates estimator_type via __mg_call)
+    mgO_orig = __mg_call(data, ctl_boot, estimator_type);
 
     n      = mgO_orig.ngroups;
     k      = mgO_orig.numvars;
@@ -141,13 +135,7 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
         endfor;
 
         // Re-estimate on bootstrap data
-        if estimator_type $== "mg";
-            mgO_b = mg(data_boot, ctl_boot);
-        elseif estimator_type $== "dcce_mg";
-            mgO_b = dcce_mg(data_boot, ctl_boot);
-        else;
-            mgO_b = cce_mg(data_boot, ctl_boot);
-        endif;
+        mgO_b = __mg_call(data_boot, ctl_boot, estimator_type);
 
         b_boot[b_iter, .] = mgO_b.b_mg[1:k]';
         b_iter = b_iter + 1;
@@ -157,4 +145,76 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
     se_boot = stdc(b_boot)';
 
     retp(se_boot, b_boot);
+endp;
+
+
+/*
+**> mgBootstrapSE
+**
+**  Convenience wrapper: estimates the model, computes wild bootstrap SEs, and
+**  returns a fully updated mgOut struct with bootstrap SEs already substituted
+**  for the default NP SEs. t-values, p-values, and CIs are recomputed.
+**
+**  This is the one-call alternative to the two-step pattern:
+**    { se_boot, b_boot } = mgBootstrap(data, ctl, B);
+**    mgO.se_mg = se_boot;        // manual replacement
+**
+**  Format:  mgO = mgBootstrapSE(data, mgCtl [, B, estimator_type])
+**
+**  Input:   data            Panel dataframe (same format as cce_mg etc.)
+**           mgCtl           mgControl struct. Set ctl.report = 0 to suppress output
+**                           during bootstrap replications (recommended).
+**           B               Number of bootstrap replications. Default 999.
+**           estimator_type  "mg", "cce_mg" (default), or "dcce_mg".
+**
+**  Output:  mgO     mgOut struct with:
+**             .se_mg  = bootstrap SEs (replacing NP SEs)
+**             .tvalue, .pval, .ci recomputed from bootstrap SEs
+**             .model  = original model string + " [Bootstrap SE]"
+**             All other fields from the original estimation are preserved.
+**
+**  Usage:
+**    ctl = mgControlCreate();
+**    ctl.y_lags = 1;
+**    mgO = mgBootstrapSE(data, ctl, 999, "dcce_mg");
+**    print mgO.b_mg;
+**    print mgO.se_mg;    // bootstrap SEs
+*/
+proc (1) = mgBootstrapSE(data, struct mgControl ctl, ...);
+    local B, estimator_type, se_boot, b_boot, k, results_boot;
+    struct mgControl ctl_silent;
+    struct mgOut mgO;
+
+    { B, estimator_type } = dynargsGet(1|2, 999, "cce_mg");
+
+    // Estimate the model (honours ctl.report for the initial estimation)
+    mgO = __mg_call(data, ctl, estimator_type);
+
+    // Bootstrap SEs (always silent during replications)
+    ctl_silent        = ctl;
+    ctl_silent.report = 0;
+    { se_boot, b_boot } = mgBootstrap(data, ctl_silent, B, estimator_type);
+
+    // Replace NP SE with bootstrap SE for MG variables (first numvars elements)
+    k = mgO.numvars;
+    mgO.b_mg   = mgO.b_mg[1:k];
+    mgO.se_mg  = se_boot[1:k];
+    mgO.tvalue = mgO.b_mg ./ mgO.se_mg;
+    mgO.pval   = 2*cdftc(mgO.tvalue, mgO.df_csa);
+    mgO.ci     = mgO.b_mg - 1.96*mgO.se_mg ~ mgO.b_mg + 1.96*mgO.se_mg;
+    mgO.model  = mgO.model $+ " [Bootstrap SE]";
+
+    // Restrict mg_vars to the MG variables (drop CSA augmentation terms)
+    mgO.mg_vars = mgO.mg_vars[1:k];
+
+    // Rebuild formatted output table with bootstrap SEs
+    results_boot = mgO.b_mg ~ mgO.se_mg ~ mgO.tvalue ~ mgO.pval;
+    mgO.out_mg   = asDF(mgO.mg_vars, "y") ~
+                   asDF(results_boot, "coeff", "se(boot)", "t(boot)", "P >|t|");
+
+    if ctl.report;
+        __print_mg_output(mgO);
+    endif;
+
+    retp(mgO);
 endp;
