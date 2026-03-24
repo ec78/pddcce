@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Bash(C:/gauss26/tgauss.exe -b -nj \"$f\")",
+      "Bash(done)",
+      "Bash(C:/gauss26/tgauss.exe -b -nj examples/bias_correction.e)",
+      "Read(//c/Users/eclow/Documents/GitHub/**)"
+    ]
+  }
+}

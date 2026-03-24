@@ -568,9 +568,14 @@ proc (1) = __getNoXbarIndices(data, xvar_names);
 
     for i(1, k, 1);
         nm = xvar_names[i];
-        if any(colnames $== nm);
-            idx[i] = indnv(nm, colnames);
-        else;
+        idx[i] = 0;
+        for j(1, rows(colnames), 1);
+            if colnames[j] $== nm;
+                idx[i] = j;
+                break;
+            endif;
+        endfor;
+        if idx[i] == 0;
             errorlogat "no_xbar_names: variable '" $+ nm $+ "' not found in data." $+
                        " Available columns: " $+ strjoin(colnames', ", ");
             end;

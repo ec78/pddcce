@@ -401,6 +401,7 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
     local b_mg, b_dm, cov_mg, se_mg, tvalue_mg, results_mg;
     local t_i, PT, e_mg, cov_pcce_rbst_NW, se_nw, se;
     local indx, tmp, tmp1;
+    local ll_vec, ll_tot, npar;
 
     PT = dynargsGet(1, 0);
 
@@ -514,7 +515,6 @@ proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
     ** LL_i = -(T_i/2)*log(2*pi) - (T_i/2)*log(sig_i^2) - (T_i-k)/2
     ** AIC = -2*LL + 2*(n*k); BIC = -2*LL + log(NT)*n*k
     */
-    local ll_vec, ll_tot, npar;
     ll_vec  = -(tivec/2) .* log(2*pi) - (tivec/2) .* log(sig_vec.^2) - (tivec-k)/2;
     ll_tot  = sumc(ll_vec);
     npar    = n * k;

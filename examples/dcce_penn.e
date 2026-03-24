@@ -11,7 +11,8 @@ library dccelib;
 
 // First load data
 fname = __FILE_DIR $+ "penn_world.dta";
-data = loadd(fname, ". + date($year, '%Y')");
+data = packr(loadd(fname, ". + date($year, '%Y')"));
+data = order(data, "id"$|"year");
 
 // Control structure
 struct mgControl mgCtl;

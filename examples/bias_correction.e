@@ -80,8 +80,8 @@ for i(1, k, 1);
 endfor;
 
 print;
-print "b_stats columns: [full-panel, first-half, second-half, HPJ]";
-print hpjO.b_stats;
+print "b_stats_hpj columns: [full-panel, first-half, second-half, HPJ]";
+print hpjO.b_stats_hpj;
 
 // -----------------------------------------------------------------------
 // HPJ also works for CCE-MG

@@ -57,12 +57,12 @@ matrix cd_pval;
 matrix R_sq;           // Mean within-group R^2 (averaged across groups)
 
 // Model fit statistics (for comparison across lag specifications)
-scalar loglik;          // Total log-likelihood across all groups (assuming normal errors)
-scalar aic;             // AIC = -2*loglik + 2*(n*k_reg)
-scalar bic;             // BIC = -2*loglik + log(nobs)*(n*k_reg)
+matrix loglik;          // Total log-likelihood across all groups (assuming normal errors)
+matrix aic;             // AIC = -2*loglik + 2*(n*k_reg)
+matrix bic;             // BIC = -2*loglik + log(nobs)*(n*k_reg)
 
 // Dynamic model metadata
-scalar y_lags_used;     // Number of lagged y included (from ctl.y_lags); 0 for MG/CCE-MG
+matrix y_lags_used;     // Number of lagged y included (from ctl.y_lags); 0 for MG/CCE-MG
 
 // Model estimates
 matrix b_vec;          // nxk individual group estimates
@@ -110,7 +110,7 @@ matrix lr_coef;         // kx1 long-run multipliers: beta / (1 - sum(phi))
 matrix lr_se;           // kx1 delta-method standard errors
 matrix lr_tvalue;       // kx1 t-statistics
 matrix lr_pval;         // kx1 p-values
-scalar adj_speed;       // Implied speed of adjustment: -(1 - sum(phi))
+matrix adj_speed;       // Implied speed of adjustment: -(1 - sum(phi))
 string array x_names;   // Names of x regressors (matches lr_coef rows)
 };
 

@@ -166,11 +166,9 @@ endp;
 **   "dcce_mg"  Dynamic CCE Mean Group (adds lagged y and CSA lags)
 */
 proc (1) = __mg_call(data, struct mgControl ctl, estimator_type);
-    local valid_types;
     struct mgOut mgO;
 
-    valid_types = "mg" $| "cce_mg" $| "dcce_mg";
-    if not any(valid_types $== estimator_type);
+    if not (estimator_type $== "mg" or estimator_type $== "cce_mg" or estimator_type $== "dcce_mg");
         errorlogat "estimator_type '" $+ estimator_type $+ "' is not valid." $+
                    " Must be one of: 'mg', 'cce_mg', 'dcce_mg'.";
         end;
