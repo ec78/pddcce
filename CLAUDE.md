@@ -9,9 +9,9 @@
 The library provides three main estimators plus companion diagnostic and inference tools.
 
 **Author:** Eric Clower, Aptech Systems, Inc. (`eric@aptech.com`)
-**Target:** GAUSS 23+
+**Target:** GAUSS 26+
 **License:** Non-commercial public use only
-**Package version:** 1.1.0
+**Package version:** 1.2.0
 
 ---
 
@@ -31,7 +31,8 @@ pddcce/
 │   ├── latex_export.src    # LaTeX table export (single and multi-model)
 │   ├── bootstrap.src       # Wild bootstrap standard errors for MG estimators
 │   ├── bias_correct.src    # Half-panel jackknife (HPJ) bias correction
-│   └── diagnostics.src     # plotResiduals(), cce_rank(), print_cce_rank()
+│   ├── diagnostics.src     # plotResiduals(), cce_rank(), print_cce_rank(), plotCoefficients(), longRunMG(), plotResidualACF()
+│   └── westerlund.src      # Westerlund (2007) panel cointegration test
 ├── docs/
 │   ├── api_reference.md    # Full public API reference
 │   ├── blog_outline.md     # Medium blog post outline
@@ -154,8 +155,12 @@ Key GAUSS conventions used in this codebase:
 | `cips(data, [p, demean])` | Pesaran (2007) CIPS panel unit root test |
 | `print_cips(cips_stat, cadf_vec, p, demean)` | Print CIPS results |
 | `plotResiduals(mgO)` | 4-panel residual diagnostic plot (scatter, histogram, Q-Q, per-group SD) |
+| `plotCoefficients(mgO)` | Caterpillar plot of per-group coefficient estimates with 95% CI |
+| `plotResidualACF(mgO [, maxlag])` | Sample ACF of pooled residuals with 95% significance bands |
 | `cce_rank(data, [mgCtl])` | Rank condition test for CCE (De Vos et al. 2024): checks CSA matrix rank |
 | `print_cce_rank(rankO)` | Print formatted rank condition test results |
+| `longRunMG(mgO)` | Delta-method long-run multipliers from DCCE-MG with y_lags |
+| `print_longRun(lrO)` | Print formatted long-run multiplier table |
 
 ### Bias correction (`src/bias_correct.src`)
 
@@ -170,6 +175,20 @@ Key GAUSS conventions used in this codebase:
 | `mgOutToLatex(mgO, filename, [se_type, note])` | Export single model to .tex |
 | `mgOutToLatexMulti(mgO_arr, labels, filename, [note])` | Export 2–6 models side-by-side |
 | `mgBootstrap(data, mgCtl, [B, estimator_type])` | Wild bootstrap SEs (Rademacher weights) |
+| `mgBootstrapSE(data, mgCtl, [B, estimator_type])` | Bootstrap SE one-call wrapper; returns mgOut with SE replaced |
+
+### Cointegration (`src/westerlund.src`)
+
+| Procedure | Description |
+|-----------|-------------|
+| `westerlundTest(data, [p, demean])` | Westerlund (2007) ECM-based panel cointegration test (Gt, Ga, Pt, Pa) |
+| `print_westerlund(wO)` | Print formatted Westerlund test results |
+
+### Additional utilities (`src/cips.src`)
+
+| Procedure | Description |
+|-----------|-------------|
+| `cips_test(data, [p, demean])` | Struct-returning wrapper for `cips()` → `cipsOut` |
 
 ### Extended estimator flags (built into `cce_mg`, `dcce_mg`)
 
@@ -218,6 +237,13 @@ All previously identified bugs are fixed. Summary:
 | `cce_mg.src` `pcceNW` | Self-assignment `cov=cov`; 3 loops | Fixed; reduced to 2 loops |
 | `cce_mg.src` `cce_mg` | Wrong model label "Mean Group" | "Common Correlated Effects..." |
 | Paths in `.e` files | Backslash escape sequences | Forward slashes everywhere |
+| `bias_correct.src` `__mg_call` | `any()` not a valid GAUSS function | Replaced with explicit `$==` comparisons |
+| `dcceutil.src` `__getNoXbarIndices` | `any(colnames $== nm)` — `any()` not valid GAUSS | Replaced with explicit loop comparison |
+| `cce_mg.src` `_mg` | `local ll_vec, ll_tot, npar` declared after executable code | Moved to top-level `local` block |
+| `cce.sdf` `mgOut` | `scalar loglik/aic/bic/y_lags_used` caused type mismatch with GAUSS 26 | Changed to `matrix` |
+| `cce.sdf` `longRunOut` | `scalar adj_speed` — type mismatch in GAUSS 26 | Changed to `matrix` |
+| `dcce_penn.e` | Missing `packr()` on data load → missing data error | Added `packr()` and `order()` |
+| `bias_correction.e` | `hpjO.b_stats` used instead of `hpjO.b_stats_hpj` | Fixed field name |
 
 ---
 

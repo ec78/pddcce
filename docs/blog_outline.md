@@ -113,7 +113,7 @@
 
 5. **Validation philosophy: the R plm benchmark.** All three estimators were verified against R's `plm::pmg()` to 6 decimal places on Penn World Tables data. This is described in the library documentation and gives applied users confidence that they are getting numerically correct results.
 
-6. **Where to get it and how to install it.** Available through the GAUSS Application Center / Aptech Systems. Requires GAUSS 23 or later. Point readers to the GitHub repository and the Aptech documentation page.
+6. **Where to get it and how to install it.** Available through the GAUSS Application Center / Aptech Systems. Requires GAUSS 26 or later. Point readers to the GitHub repository and the Aptech documentation page.
 
 ---
 

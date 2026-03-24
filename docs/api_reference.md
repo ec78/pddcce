@@ -1,6 +1,6 @@
 # dccelib API Reference
 
-**Version 0.3.0** — Eric Clower, Aptech Systems
+**Version 1.2.0** — Eric Clower, Aptech Systems
 
 This document provides a complete reference for all public procedures in dccelib. Internal procedures (prefixed with `__`) are not documented here.
 
@@ -22,16 +22,30 @@ This document provides a complete reference for all public procedures in dccelib
 - [Diagnostic Tests](#diagnostic-tests)
   - [cdtest](#cdtest)
   - [cips](#cips)
+  - [cips_test](#cips_test)
   - [print_cips](#print_cips)
   - [slopehomo](#slopehomo)
   - [print_slopehomo](#print_slopehomo)
+  - [cce_rank](#cce_rank)
+  - [print_cce_rank](#print_cce_rank)
+  - [westerlundTest](#westerlundtest)
+  - [print_westerlund](#print_westerlund)
 - [Bias Correction](#bias-correction)
   - [hpj](#hpj)
 - [Bootstrap Inference](#bootstrap-inference)
   - [mgBootstrap](#mgbootstrap)
+  - [mgBootstrapSE](#mgbootstrapse)
+- [Long-Run Analysis](#long-run-analysis)
+  - [longRunMG](#longrunmg)
+  - [print_longRun](#print_longrun)
+- [Visualization](#visualization)
+  - [plotResiduals](#plotresiduals)
+  - [plotCoefficients](#plotcoefficients)
+  - [plotResidualACF](#plotresidualacf)
 - [LaTeX Export](#latex-export)
   - [mgOutToLatex](#mgouttolatex)
-  - [mgOutToLatexMulti](#mgouttolatexml)
+  - [mgOutToLatexMulti](#mgouttolatexmulti)
+- [Recommended Workflow](#recommended-workflow)
 
 ---
 
@@ -61,6 +75,9 @@ ctl = mgControlCreate();
 | `x_common` | matrix | `0` | Regressors that are common across all units (not unit-specific). |
 | `zero_x` | matrix | `0` | Column index of variables to normalize to zero (internal normalization). |
 | `zero_id` | matrix | `0` | Group ID for the normalization reference group. |
+| `y_var` | string | `""` | Name of the dependent variable column. If set, `data` columns are reordered automatically. |
+| `x_vars` | string array | `""` | Names of regressor columns (`"x1" $\| "x2"`). Used with `y_var`. |
+| `no_xbar_names` | string array | `""` | Variable names to exclude from CSA (string alternative to `no_xbar`). |
 
 ---
 
@@ -79,7 +96,9 @@ Output structure returned by `mg()`, `cce_mg()`, `dcce_mg()`, and `hpj()`.
 | `ci` | k×2 | 95% confidence intervals: `[b_mg - 1.96*se_mg, b_mg + 1.96*se_mg]`. |
 | `cov_mg` | k×k | NP covariance matrix of the MG estimator. |
 | `b_vec` | n×k | Individual group OLS estimates. Row i = group i's slope vector. |
-| `b_stats` | k×4 | Heterogeneity of slopes: `[min, mean, max, sd]` across groups. For HPJ output: `[full, h1, h2, hpj]`. |
+| `b_stats` | k×4 | Slope heterogeneity: `[min, mean, max, sd]` of individual `b_i` across groups. |
+| `b_stats_hpj` | k×4 | HPJ intermediate estimates: `[b_full, b_h1, b_h2, b_hpj]`. Only populated by `hpj()`; `0` otherwise. |
+| `y_lags_used` | matrix | Number of lagged y included. `0` for `mg()`/`cce_mg()`; `ctl.y_lags` for `dcce_mg()`. |
 | `out_mg` | dataframe | Formatted results dataframe (variable names + [coef, se, t, p]). |
 
 #### Diagnostics
@@ -89,6 +108,9 @@ Output structure returned by `mg()`, `cce_mg()`, `dcce_mg()`, and `hpj()`.
 | `cd_stat` | Pesaran (2004) CD statistic. Asymptotically N(0,1) under H₀ of no CD. |
 | `cd_pval` | Two-sided p-value for the CD test. |
 | `R_sq` | Mean within-group R², averaged across all panel units. |
+| `loglik` | Total log-likelihood across all groups (normal errors assumed). |
+| `aic` | AIC = −2·loglik + 2·(n·k). |
+| `bic` | BIC = −2·loglik + log(NT)·(n·k). |
 
 #### For downstream procedures
 
@@ -349,6 +371,18 @@ print_cips(cips_stat, cadf_vec, 1, 0);
 
 ---
 
+### cips_test
+
+Struct-returning wrapper for `cips()`.
+
+```gauss
+proc (1) = cips_test(data [, p, demean]);
+```
+
+Returns a `cipsOut` struct with fields: `cips_stat`, `cadf_vec`, `p`, `demean`. Useful when you want a single object to store and pass CIPS results.
+
+---
+
 ### print_cips
 
 Prints CIPS test results in a formatted table.
@@ -411,6 +445,74 @@ proc (0) = print_slopehomo(delta, pval, delta_adj, pval_adj);
 
 ---
 
+### cce_rank
+
+**CCE rank condition test** (De Vos, Everaert & Sarafidis 2024).
+
+```gauss
+proc (1) = cce_rank(data [, mgCtl]);
+```
+
+Tests whether the CSA matrix is full column rank (necessary condition for CCE consistency).
+
+**Returns:** `cceRankOut` struct with fields: `rank`, `k_csa`, `sing_vals`, `cond_num`, `pass`, `var_names`.
+
+**Example:**
+```gauss
+rankO = cce_rank(reg_data);
+print_cce_rank(rankO);
+```
+
+---
+
+### print_cce_rank
+
+Prints rank condition test results.
+
+```gauss
+proc (0) = print_cce_rank(rankO);
+```
+
+---
+
+### westerlundTest
+
+**Westerlund (2007) ECM-based panel cointegration test.**
+
+```gauss
+proc (1) = westerlundTest(data [, p, demean]);
+```
+
+Tests H₀: no cointegration (αᵢ = 0 for all i) using four statistics: Gₜ, Gₐ (group-mean), Pₜ, Pₐ (panel). All are left-tailed.
+
+**Arguments:**
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `data` | Yes | — | Dataframe: [group, time, y, x₁, ..., xₖ]. |
+| `p` | No | `0` (auto) | Lag order for the ECM. Auto uses `floor(T^(1/3))`. |
+| `demean` | No | `1` | `1` = intercept only; `2` = intercept + trend. |
+
+**Returns:** `westerlundOut` struct with fields: `Gt`, `Ga`, `Pt`, `Pa`, `alpha_vec`, `se_vec`, `p`, `demean`, `n_valid`.
+
+**Example:**
+```gauss
+wO = westerlundTest(data[., "id" "year" "log_rgdpo" "log_ck"]);
+print_westerlund(wO);
+```
+
+---
+
+### print_westerlund
+
+Prints Westerlund test results.
+
+```gauss
+proc (0) = print_westerlund(wO);
+```
+
+---
+
 ## Bias Correction
 
 ### hpj
@@ -433,7 +535,7 @@ proc (1) = hpj(data, mgCtl [, estimator_type]);
 - `b_mg`: HPJ bias-corrected coefficients.
 - `se_mg`: NP standard errors from the full-sample estimate (conservative).
 - `tvalue`, `pval`, `ci`: Recomputed using HPJ `b_mg` and full-sample `se_mg`.
-- `b_stats`: k×4 matrix with columns `[b_full, b_h1, b_h2, b_hpj]`.
+- `b_stats_hpj`: k×4 matrix with columns `[b_full, b_h1, b_h2, b_hpj]`.
 - `model`: Full-sample model string with `"[HPJ Bias-Corrected]"` appended.
 
 **Notes:**
@@ -458,7 +560,7 @@ print "HPJ coefficients:";
 print hpjO.b_mg;
 
 print "Full vs. HPJ comparison:";
-print hpjO.b_stats;    // [full, h1, h2, hpj] side by side
+print hpjO.b_stats_hpj;    // [full, h1, h2, hpj] side by side
 ```
 
 ---
@@ -479,7 +581,7 @@ proc (2) = mgBootstrap(data, mgCtl [, B, estimator_type]);
 |-----------|----------|---------|-------------|
 | `data` | Yes | — | Panel dataframe in the same format as the core estimators. |
 | `mgCtl` | Yes | — | `mgControl` struct. |
-| `B` | No | `499` | Number of bootstrap replications. Use B ≥ 999 for publication. |
+| `B` | No | `999` | Number of bootstrap replications. Use B ≥ 999 for publication. |
 | `estimator_type` | No | `"cce_mg"` | String: `"mg"`, `"cce_mg"`, or `"dcce_mg"`. |
 
 **Returns:**
@@ -521,6 +623,93 @@ for j(1, cols(b_boot), 1);
           ntos(quantile(b_boot[., j], 0.975), 4) $+ "]";
 endfor;
 ```
+
+---
+
+### mgBootstrapSE
+
+One-call wrapper that estimates the model and returns an `mgOut` struct with bootstrap SEs substituted for NP SEs.
+
+```gauss
+proc (1) = mgBootstrapSE(data, mgCtl [, B, estimator_type]);
+```
+
+**Returns:** `mgOut` struct with `se_mg`, `tvalue`, `pval`, `ci` replaced by bootstrap-based values; `model` string gets `"[Bootstrap SE]"` appended.
+
+---
+
+## Long-Run Analysis
+
+### longRunMG
+
+**Long-run multipliers** from a DCCE-MG model with lagged y.
+
+```gauss
+proc (1) = longRunMG(mgO);
+```
+
+Computes LR_j = β_j / (1 − Σφ) with delta-method standard errors, where φ are the lagged-y coefficients and β_j is the short-run coefficient on xⱼ.
+
+**Arguments:** `mgO` from `dcce_mg()` with `y_lags_used >= 1`.
+
+**Returns:** `longRunOut` struct with fields: `lr_coef`, `lr_se`, `lr_tvalue`, `lr_pval`, `adj_speed`, `x_names`.
+
+**Example:**
+```gauss
+ctl = mgControlCreate();
+ctl.y_lags = 1;
+cceO = dcce_mg(reg_data, ctl);
+lrO  = longRunMG(cceO);
+print_longRun(lrO);
+```
+
+---
+
+### print_longRun
+
+Prints a formatted long-run multiplier table.
+
+```gauss
+proc (0) = print_longRun(lrO);
+```
+
+---
+
+## Visualization
+
+### plotResiduals
+
+**4-panel residual diagnostic plot.**
+
+```gauss
+proc (0) = plotResiduals(mgO);
+```
+
+Panels: residuals over observation index; histogram; normal Q-Q plot; per-group residual SD bar chart.
+
+---
+
+### plotCoefficients
+
+**Caterpillar plot of per-group slope estimates.**
+
+```gauss
+proc (0) = plotCoefficients(mgO);
+```
+
+For each MG regressor, plots per-group estimates sorted ascending, with 95% CIs and a horizontal line at the MG mean. Up to 6 regressors in a grid layout.
+
+---
+
+### plotResidualACF
+
+**Sample ACF of pooled residuals.**
+
+```gauss
+proc (0) = plotResidualACF(mgO [, maxlag]);
+```
+
+Displays autocorrelations at lags 0 to `maxlag` (default 20) with ±1.96/√N significance bands.
 
 ---
 
