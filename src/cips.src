@@ -35,6 +35,7 @@
 **  Usage:   { cips, cadf } = cips(data);
 **           { cips, cadf } = cips(data, p, demean);
 */
+#include cce.sdf 
 proc (2) = cips(data, ...);
 
     local p, demean;

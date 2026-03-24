@@ -151,7 +151,7 @@ string array var_names; // Names of variables included in CSA (y and x)
 ** Reject H0 when the statistic is smaller than the critical value (left-tailed).
 */
 struct westerlundOut {
-scalar Gt;          // Group-mean tau: (1/N) * sum_i [alpha_i / SE(alpha_i)]
+scalar G_t;          // Group-mean tau: (1/N) * sum_i [alpha_i / SE(alpha_i)]
 scalar Ga;          // Group-mean alpha: (1/N) * sum_i [T_i * alpha_i]
 scalar Pt;          // Panel tau: precision-weighted pooled alpha / SE
 scalar Pa;          // Panel alpha: T_bar * precision-weighted pooled alpha
