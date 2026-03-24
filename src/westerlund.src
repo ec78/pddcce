@@ -20,7 +20,7 @@
 **  Under cointegration, alpha_i < 0.
 **
 **  Four test statistics are reported:
-**    Gt = (1/N) * sum_i [alpha_i / SE(alpha_i)]      Group-mean tau
+**    G_t = (1/N) * sum_i [alpha_i / SE(alpha_i)]      Group-mean tau
 **    Ga = (1/N) * sum_i [T_i * alpha_i]              Group-mean alpha (T-scaled)
 **    Pt = alpha_P / SE(alpha_P)                       Pooled tau (precision-wtd)
 **    Pa = T_bar * alpha_P                             Pooled alpha (T-scaled)
@@ -55,7 +55,7 @@ proc (1) = westerlundTest(data, ...);
     local alpha_col;
     local alpha_vec, se_vec, tau_vec;
     local valid, alpha_v, se_v, tau_v, n_valid;
-    local Gt, Ga, Pt, Pa, prec_sum, alpha_P, se_P;
+    local G_t, Ga, Pt, Pa, prec_sum, alpha_P, se_P;
     struct westerlundOut wO;
 
     { p, demean } = dynargsGet(1|2, 0, 1);
@@ -167,7 +167,7 @@ proc (1) = westerlundTest(data, ...);
     n_valid = rows(alpha_v);
 
     // Westerlund (2007) test statistics
-    Gt = meanc(tau_v);                                      // Group-mean tau
+    G_t = meanc(tau_v);                                      // Group-mean tau
     Ga = meanc(selif(tvec, valid) .* alpha_v);              // (1/N) sum T_i * alpha_i
 
     // Precision-weighted pooled estimator (for Pt and Pa)
@@ -177,7 +177,7 @@ proc (1) = westerlundTest(data, ...);
     Pt       = alpha_P / se_P;     // Panel tau
     Pa       = T_bar * alpha_P;    // Panel alpha (T-scaled)
 
-    wO.Gt        = Gt;
+    wO.G_t        = G_t;
     wO.Ga        = Ga;
     wO.Pt        = Pt;
     wO.Pa        = Pa;
@@ -223,7 +223,7 @@ proc (0) = print_westerlund(struct westerlundOut wO);
     print chrs(45*ones(wid, 1));
     sprintf("  %-36s %12s", "Statistic", "Value");
     print chrs(45*ones(wid, 1));
-    sprintf("  %-36s %12.4f", "Gt  (group-mean tau):", wO.Gt);
+    sprintf("  %-36s %12.4f", "G_t  (group-mean tau):", wO.G_t);
     sprintf("  %-36s %12.4f", "Ga  (group-mean alpha, T-scaled):", wO.Ga);
     sprintf("  %-36s %12.4f", "Pt  (panel tau, pooled):", wO.Pt);
     sprintf("  %-36s %12.4f", "Pa  (panel alpha, T-scaled):", wO.Pa);
@@ -231,7 +231,7 @@ proc (0) = print_westerlund(struct westerlundOut wO);
     print "  Note: All tests are left-tailed -- reject H0 when stat < CV.";
     print "  Compare to Westerlund (2007) Table 1 critical values";
     print "  (function of N, T, p, and deterministic specification).";
-    print "  Gt/Ga: H1 = at least one group is cointegrated.";
+    print "  G_t/Ga: H1 = at least one group is cointegrated.";
     print "  Pt/Pa: H1 = the panel as a whole is cointegrated.";
     print "  IMPORTANT: Standard CVs assume cross-sectional independence.";
     print "  For CCE residuals, bootstrap p-values via mgBootstrap() are preferred.";
