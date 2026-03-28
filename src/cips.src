@@ -24,29 +24,39 @@
 **  Input:   data      Panel dataframe. Columns: [id, time, y].
 **                     Only the first three columns are used.
 **
-**  Optional keyword arguments (pass as mgControl-style, or via ...):
+**  Optional positional arguments (via ...):
 **           p         Number of lags. Default: determined by __getPT(T).
 **           demean    1 = include individual intercept (default).
 **                     2 = include intercept + trend.
+**           report    1 = print results table (default). 0 = suppress.
 **
 **  Output:  cips_stat   Scalar CIPS statistic.
 **           cadf_vec    Nx1 vector of per-group CADF_i statistics.
 **
 **  Usage:   { cips, cadf } = cips(data);
 **           { cips, cadf } = cips(data, p, demean);
+**           { cips, cadf } = cips(data, p, demean, 0);   // suppress output
 */
 #include cce.sdf 
 proc (2) = cips(data, ...);
 
-    local p, demean;
-    { p, demean } = dynargsGet(1|2, 0, 1);
-
+    local p, demean, report;
     local groupvar, timevar, yname, idvec, datevec, tvec, n, T, varnames;
     local cumtivec, i, y_full, ybar_full, dybar_full;
     local cips_stat, cadf_vec;
     local r1, r2, y_i, T_i, t_start, t_end, t_s_idx, agg_tmp;
     local ybar_i, dybar_i, dy_i, lhs, rhs, T_eff, j;
     local xx_inv, b, e, sig2, se_b, k_cadf, beta_col, p_trim;
+    local _yvar, _xvars;
+
+    // Formula string support: cips(data, "y" [, p, demean, report])
+    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+        data = __selectVars(data, _yvar, "");
+        { p, demean, report } = dynargsGet(2|4, 0, 1, 1);
+    else;
+        { p, demean, report } = dynargsGet(1|3, 0, 1, 1);
+    endif;
 
     varnames = getcolnames(data);
     { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
@@ -168,6 +178,10 @@ proc (2) = cips(data, ...);
     // CIPS = mean of CADF_i (drop missing)
     cips_stat = meanc(packr(cadf_vec));
 
+    if report;
+        print_cips(cips_stat, cadf_vec, p, demean);
+    endif;
+
     retp(cips_stat, cadf_vec);
 endp;
 
@@ -228,17 +242,31 @@ endp;
 **             .p           Lag order used
 **             .demean      Deterministic specification (1 or 2)
 **
+**  Optional positional arguments (via ...):
+**           p         Number of lags. Default: determined by __getPT(T).
+**           demean    Deterministic spec (1 or 2). Default 1.
+**           report    1 = print results table (default). 0 = suppress.
+**
 **  Usage:
 **    cO = cips_test(data[., "id" "year" "log_rgdpo"]);
-**    print_cips(cO.cips_stat, cO.cadf_vec, cO.p, cO.demean);
+**    cO = cips_test(data[., "id" "year" "log_rgdpo"], 1, 1, 0);  // suppress
 */
 proc (1) = cips_test(data, ...);
-    local p, demean;
+    local p, demean, report, _formula;
     struct cipsOut cO;
 
-    { p, demean } = dynargsGet(1|2, 0, 1);
-
-    { cO.cips_stat, cO.cadf_vec } = cips(data, p, demean);
+    // Formula string support: cips_test(data, "y" [, p, demean, report])
+    // Forward the formula to cips() by pre-selecting the column here
+    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        _formula = dynargsGet(1);
+        { p, demean, report } = dynargsGet(2|4, 0, 1, 1);
+        // Pass report=0 to cips() to avoid double-printing
+        { cO.cips_stat, cO.cadf_vec } = cips(data, _formula, p, demean, 0);
+    else;
+        { p, demean, report } = dynargsGet(1|3, 0, 1, 1);
+        // Pass report=0 to cips() to avoid double-printing
+        { cO.cips_stat, cO.cadf_vec } = cips(data, p, demean, 0);
+    endif;
 
     // Recover actual lag order used (cips() applies automatic selection when p=0)
     if p == 0;
@@ -248,6 +276,10 @@ proc (1) = cips_test(data, ...);
     endif;
 
     cO.demean = demean;
+
+    if report;
+        print_cips(cO.cips_stat, cO.cadf_vec, cO.p, cO.demean);
+    endif;
 
     retp(cO);
 endp;

@@ -7,7 +7,21 @@
       "Bash(C:/gauss26/tgauss.exe -b -nj \"$f\")",
       "Bash(done)",
       "Bash(C:/gauss26/tgauss.exe -b -nj examples/bias_correction.e)",
-      "Read(//c/Users/eclow/Documents/GitHub/**)"
+      "Read(//c/Users/eclow/Documents/GitHub/**)",
+      "Bash(grep -n \"print_cips\\\\|print_slopehomo\\\\|print_westerlund\\\\|print_cce_rank\\\\|print_longRun\" c:/Users/eclow/Documents/GitHub/pddcce/examples/*.e)",
+      "Bash(ls c:/Users/eclow/Documents/GitHub/pddcce/validation/benchmark_*results*)",
+      "Bash(C:/gauss26/tgauss.exe -b -nj validation/benchmark_gauss.e)",
+      "Bash(\"C:/Program Files/R/R-4.5.0/bin/Rscript.exe\" validation/benchmark_r.R)",
+      "Bash(python validation/benchmark_python.py)",
+      "Bash(\"C:/Program Files/R/R-4.5.0/bin/Rscript.exe\" validation/compile_benchmark.R)",
+      "WebFetch(domain:docs.aptech.com)",
+      "Bash(grep -n proc.*__find_time_id c:/gauss26/src/panel_data_management.src)",
+      "Bash(grep -rn proc.*__find_time_id c:/gauss26/)",
+      "Bash(grep -rn proc.*__find_time_id_var c:/gauss26/src/)",
+      "Bash(grep -n \"### \\\\`mg\\\\|### \\\\`cce_mg\\\\|### \\\\`dcce_mg\\\\|### \\\\`cips\\\\|### \\\\`westerlund\\\\|### \\\\`pcce_mg\" \"c:/Users/eclow/Documents/GitHub/pddcce/docs/api_reference.md\")",
+      "Bash(grep -n \"^### \\\\`\\\\|^## \" \"c:/Users/eclow/Documents/GitHub/pddcce/docs/api_reference.md\")",
+      "Bash(\"C:/gauss26/tgauss.exe\" -b -nj validation/validate_gauss.e)",
+      "Bash(\"C:/gauss26/tgauss.exe\" -b -nj examples/cce_penn.e)"
     ]
   }
 }

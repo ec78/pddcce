@@ -34,18 +34,21 @@
 **           p         Lag order. Default 0 = auto via floor(T^(1/3)).
 **           demean    1 = intercept (default). 2 = intercept + trend.
 **
-**  Output:  wO        westerlundOut struct. Use print_westerlund(wO) to display.
+**  Output:  wO        westerlundOut struct.
+**
+**  Optional positional arguments (via ...):
+**           p         Lag order. Default 0 = auto via floor(T^(1/3)).
+**           demean    1 = intercept (default). 2 = intercept + trend.
+**           report    1 = print results table (default). 0 = suppress.
 **
 **  Usage:
 **    wO = westerlundTest(data);
-**    print_westerlund(wO);
 **
-**    // With lags and trend:
-**    wO = westerlundTest(data, 2, 2);
-**    print_westerlund(wO);
+**    // With lags and trend, suppress output:
+**    wO = westerlundTest(data, 2, 2, 0);
 */
 proc (1) = westerlundTest(data, ...);
-    local p, demean;
+    local p, demean, report;
     local varnames, groupvar, timevar;
     local idvec, tvec, n, cumtivec, T_bar;
     local p_act, k;
@@ -56,9 +59,17 @@ proc (1) = westerlundTest(data, ...);
     local alpha_vec, se_vec, tau_vec;
     local valid, alpha_v, se_v, tau_v, n_valid;
     local G_t, Ga, Pt, Pa, prec_sum, alpha_P, se_P;
+    local _yvar, _xvars;
     struct westerlundOut wO;
 
-    { p, demean } = dynargsGet(1|2, 0, 1);
+    // Formula string support: westerlundTest(data, "y ~ x1 + x2" [, p, demean, report])
+    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+        data = __selectVars(data, _yvar, _xvars);
+        { p, demean, report } = dynargsGet(2|4, 0, 1, 1);
+    else;
+        { p, demean, report } = dynargsGet(1|3, 0, 1, 1);
+    endif;
 
     varnames = getcolnames(data);
     { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
@@ -159,8 +170,13 @@ proc (1) = westerlundTest(data, ...);
 
     endfor;
 
-    // Drop groups where obs were insufficient
-    valid   = not ismiss(alpha_vec);
+    // Drop groups where obs were insufficient (element-wise missing check)
+    valid = zeros(n, 1);
+    for j(1, n, 1);
+        if not scalmiss(alpha_vec[j]);
+            valid[j] = 1;
+        endif;
+    endfor;
     alpha_v = selif(alpha_vec, valid);
     se_v    = selif(se_vec, valid);
     tau_v   = selif(tau_vec, valid);
@@ -186,6 +202,10 @@ proc (1) = westerlundTest(data, ...);
     wO.alpha_vec = alpha_vec;
     wO.se_vec    = se_vec;
     wO.n_valid   = n_valid;
+
+    if report;
+        print_westerlund(wO);
+    endif;
 
     retp(wO);
 endp;

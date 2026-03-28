@@ -80,6 +80,64 @@ endp;
 
 
 /*
+** __parse_formula
+**
+** Parses a Wilkinson-style formula string and returns the dependent variable
+** name and regressor names suitable for passing to __selectVars().
+**
+** Format:  { y_var, x_vars } = __parse_formula(formula)
+**
+** Input:   formula   String. Two forms accepted:
+**                    "y ~ x1 + x2"  full formula (standard form)
+**                    "y"            variable name only (univariate, e.g. for CIPS)
+**
+** Output:  y_var     String: dependent variable name.
+**          x_vars    String array of regressor names, or "" if univariate.
+**
+** Notes:   Intercept tokens (1, -1, 0) on the RHS are silently dropped;
+**          panel models always include an intercept separately.
+*/
+proc (2) = __parse_formula(formula);
+    local tilde_pos, y_var, rhs, x_vars, pos, next_pos, vname, rhs_len;
+
+    tilde_pos = strindx(formula, "~", 1);
+
+    if tilde_pos > 0;
+        y_var   = strtrim(strsect(formula, 1, tilde_pos - 1));
+        rhs     = strtrim(strsect(formula, tilde_pos + 1, strlen(formula) - tilde_pos));
+        rhs_len = strlen(rhs);
+
+        // Scan rhs for "+" delimiters, accumulating variable names
+        x_vars = {};
+        pos    = 1;
+        do while pos <= rhs_len;
+            next_pos = strindx(rhs, "+", pos);
+            if next_pos == 0;
+                vname = strtrim(strsect(rhs, pos, rhs_len - pos + 1));
+                pos   = rhs_len + 1;
+            else;
+                vname = strtrim(strsect(rhs, pos, next_pos - pos));
+                pos   = next_pos + 1;
+            endif;
+            if vname $!= "1" and vname $!= "0" and vname $!= "-1" and strlen(vname) > 0;
+                x_vars = x_vars $| vname;
+            endif;
+        endo;
+
+        if rows(x_vars) == 0;
+            x_vars = "";
+        endif;
+    else;
+        // Univariate: bare variable name (CIPS, Westerlund with no x)
+        y_var  = strtrim(formula);
+        x_vars = "";
+    endif;
+
+    retp(y_var, x_vars);
+endp;
+
+
+/*
 ** __selectVars
 **
 ** Reorders data columns to the required [group, time, y, x1, ..., xk] format,

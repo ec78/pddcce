@@ -1,0 +1,16 @@
+dataset,N,T,estimator,tool,time_sec
+Penn WTables,93,47,MG,GAUSS/dccelib,0.012
+Penn WTables,93,47,CCE-MG,GAUSS/dccelib,0.014
+Penn WTables,93,47,DCCE-MG,GAUSS/dccelib,0.0205
+Penn WTables,93,47,CIPS,GAUSS/dccelib,0.003
+Penn WTables,93,47,Westerlund,GAUSS/dccelib,0.006
+Simulated M,100,50,MG,GAUSS/dccelib,0.014
+Simulated M,100,50,CCE-MG,GAUSS/dccelib,0.015
+Simulated M,100,50,DCCE-MG,GAUSS/dccelib,0.02
+Simulated M,100,50,CIPS,GAUSS/dccelib,0.003
+Simulated M,100,50,Westerlund,GAUSS/dccelib,0.006
+Simulated L,200,100,MG,GAUSS/dccelib,0.061
+Simulated L,200,100,CCE-MG,GAUSS/dccelib,0.066
+Simulated L,200,100,DCCE-MG,GAUSS/dccelib,0.0805
+Simulated L,200,100,CIPS,GAUSS/dccelib,0.008
+Simulated L,200,100,Westerlund,GAUSS/dccelib,0.0215

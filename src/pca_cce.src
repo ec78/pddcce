@@ -1,0 +1,254 @@
+#include cce.sdf
+
+/*
+**> pcce_mg
+**
+**  Principal Component CCE Mean Group (PC-CCE-MG) estimator.
+**
+**  MOTIVATION
+**  ----------
+**  Standard CCE uses raw cross-sectional averages of y and x as proxies for
+**  the unobserved common factors. This works well when the number of common
+**  factors m is at most k+1 (the rank condition). When the panel has many
+**  near-collinear variables or more factors than observables, the CSA matrix
+**  may be rank-deficient and CCE can become inconsistent.
+**
+**  PC-CCE replaces (or augments) the raw CSAs with the first m principal
+**  components of the T x (k+1) CSA matrix. This:
+**    1. Reduces the dimension of the augmentation (fewer regressors per group)
+**    2. Improves power when factors are sparse relative to observables
+**    3. Is robust when the rank condition barely passes or fails
+**
+**  REFERENCE
+**  ---------
+**  Kapetanios, G., Pesaran, M.H. & Yamagata, T. (2011). Panels with
+**    nonstationary multifactor error structures. Journal of Econometrics,
+**    160(2), 326-348.
+**
+**  Ahn, S.C. & Horenstein, A.R. (2013). Eigenvalue ratio test for the number
+**    of factors. Econometrica, 81(3), 1203-1227.
+**
+**  NOTE: This function requires the GAUSS Machine Learning (GML) library
+**  (pcaFit procedure). Install via the GAUSS Package Manager, then load
+**  with `library gml;` before calling pcce_mg().
+**
+**  Format:  pcceO = pcce_mg(data [, mgCtl, num_pc])
+**
+**  Input:   data      Panel dataframe: [group, time, y, x1, ..., xk].
+**                     Same format as cce_mg(). Sorted by group then time.
+**                     No missing values (use packr() first).
+**
+**           mgCtl     Optional mgControl struct. All standard ctl fields apply
+**                     (y_var, x_vars, x_csa, no_xbar, report, etc.).
+**                     ctl.cr_lags also applies to lagged PC scores.
+**
+**           num_pc    Optional scalar. Number of principal components to
+**                     retain as factor proxies. Default: 0 = automatic
+**                     selection using the eigenvalue ratio (ER) criterion
+**                     of Ahn & Horenstein (2013), capped at k+1.
+**
+**  Output:  pcceO     mgOut struct. Same fields as cce_mg(). The .model
+**                     string is "CCE-MG [PC-CCE, m=<num_pc>]".
+**
+**  Usage:
+**    library dccelib, gml;
+**    struct mgControl ctl;
+**    ctl = mgControlCreate();
+**    ctl.x_csa = data[., "log_hc"];
+**
+**    struct mgOut pcceO;
+**    pcceO = pcce_mg(reg_data, ctl);           // auto PC selection
+**    pcceO = pcce_mg(reg_data, ctl, 2);        // force 2 PCs
+**
+**  To check the rank condition before and after PCA:
+**    rankO = cce_rank(reg_data);               // check raw CSA rank
+**    print_cce_rank(rankO);
+*/
+proc (1) = pcce_mg(data, ...);
+
+    local num_pc, m_auto;
+    local ctl_dflt, varnames;
+    local data_bar, csa_raw, T, n_csa, sv, er_ratios, h_pc, pc_scores;
+    local pc_colnames, j, pc_name;
+    local data_aug, csa_lags_orig, pcceO;
+
+    struct mgControl ctl;
+    struct mgControl ctl_dflt_s;
+    struct mgOut pcceO_s;
+
+    // --- Check that GML (pcaFit) is available ---
+    if not procnameid("pcaFit");
+        errorlogat "pcce_mg: The GAUSS Machine Learning (GML) library is required." $+
+                   " Install it via the GAUSS Package Manager and add" $+
+                   " 'library gml;' before calling pcce_mg().";
+        end;
+    endif;
+
+    // --- Optional arguments ---
+    ctl_dflt_s = mgControlCreate();
+
+    // Formula string support: pcce_mg(data, "y ~ x1 + x2" [, ctl, num_pc])
+    local _yvar_f, _xvars_f;
+    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        { _yvar_f, _xvars_f } = __parse_formula(dynargsGet(1));
+        data   = __selectVars(data, _yvar_f, _xvars_f);
+        { ctl, num_pc } = dynargsGet(2|3, ctl_dflt_s, 0);
+    else;
+        { ctl, num_pc } = dynargsGet(1|2, ctl_dflt_s, 0);
+    endif;
+
+    // --- Variable selection by name via control struct (overrides formula if both given) ---
+    if ctl.y_var $!= "";
+        data = __selectVars(data, ctl.y_var, ctl.x_vars);
+    endif;
+
+    // --- Compute cross-sectional average matrix ---
+    // data_bar is a T x (k+3) dataframe: [group_id, time, ybar, xbar1, ..., xbark]
+    // We also include ctl.x_csa variables if provided.
+    local groupvar, timevar, _vnames;
+    varnames = getcolnames(data);
+    { groupvar, timevar, _vnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+
+    data_bar = getCSA(data, groupvar, timevar, ctl.x_csa);
+
+    // Columns 3+ are the CSA values (y_bar, x1_bar, ..., xk_bar [, x_csa_bar])
+    csa_raw = data_bar[., 3:cols(data_bar)];
+    T       = rows(csa_raw);
+    n_csa   = cols(csa_raw);   // = k+1 (or k+1+extra if x_csa provided)
+
+    // --- Center the CSA matrix (required before PCA) ---
+    csa_raw = csa_raw - ones(T, 1) * meanc(csa_raw)';
+
+    // --- Determine number of PCs to retain ---
+    if num_pc == 0;
+        // Automatic: eigenvalue ratio criterion (Ahn & Horenstein 2013)
+        // ER(m) = lambda(m) / lambda(m+1) — choose m that maximises ER
+        sv      = svd(csa_raw);
+        sv      = sv[1:n_csa];       // singular values of csa_raw
+        m_auto  = __pc_er_criterion(sv .^ 2, n_csa);
+        num_pc  = m_auto;
+    endif;
+
+    // Clamp: at least 1, at most n_csa
+    num_pc = maxc(1|minc(num_pc|n_csa));
+
+    // --- Run PCA via GML pcaFit ---
+    // pcaFit expects a T x p matrix; returns pcaOut struct with .scores (T x m)
+    local pO;
+    struct pcaOut pO_s;
+    pO_s = pcaFit(csa_raw, num_pc);
+
+    // PC scores: T x num_pc matrix — these replace the raw CSAs as factor proxies
+    pc_scores = pO_s.scores;
+
+    // --- Build column names for the PC augmentation variables ---
+    pc_colnames = "";
+    for j(1, num_pc, 1);
+        pc_name     = "pc" $+ ntos(j, 1);
+        pc_colnames = pc_colnames $| pc_name;
+    endfor;
+    pc_colnames = pc_colnames[2:num_pc+1];   // drop leading empty string
+
+    // --- Construct the augmented dataset to pass to cce_mg ---
+    // Strategy: pass the PC scores as ctl.x_csa and exclude ALL original
+    // variables from the CSA (since PCA already incorporates them).
+    // We replace ctl.x_csa with pc_scores and set no_xbar to exclude
+    // all y and x columns so that cce_mg builds CSAs only from pc_scores.
+    //
+    // However, cce_mg's internal getCSA averages ctl.x_csa across groups —
+    // but pc_scores are already time-series (T x m) without a group index.
+    // We therefore pass pc_scores as a stacked NxT_i panel so getCSA can
+    // average them (averaging constants gives the same constant — harmless).
+    //
+    // Cleanest approach: replicate the T-length pc_scores for all N groups,
+    // then pass as ctl.x_csa; set no_xbar for ALL original x columns so
+    // only the PC-derived CSAs enter the augmentation.
+
+    local n, idvec, tvec, cumtivec, i, r1, r2, T_i;
+    local pc_stacked;
+
+    idvec    = unique(data[., groupvar]);
+    tvec     = counts(data[., groupvar], idvec);
+    n        = rows(idvec);
+    cumtivec = 0|cumsumc(tvec);
+
+    // Stack pc_scores for each group (each group gets the same T PC values,
+    // aligned to their time span)
+    local t_start_i, t_end_i, pc_i, agg_tmp;
+    local datevec;
+    datevec = unique(data[., timevar]);
+
+    pc_stacked = zeros(rows(data), num_pc);
+    for i(1, n, 1);
+        r1    = cumtivec[i] + 1;
+        r2    = cumtivec[i+1];
+        T_i   = tvec[i];
+        agg_tmp  = aggregate(data[r1:r2, groupvar$|timevar], "min", groupvar);
+        t_start_i = indnv(agg_tmp[., 2], datevec)[1];
+        t_end_i   = t_start_i + T_i - 1;
+        pc_stacked[r1:r2, .] = pc_scores[t_start_i:t_end_i, .];
+    endfor;
+
+    // Build a modified ctl: use pc_stacked as x_csa, exclude all original
+    // y and x from CSA via no_xbar (columns 3 through k+2)
+    local ctl_pc;
+    struct mgControl ctl_pc_s;
+    ctl_pc_s         = ctl;
+    ctl_pc_s.x_csa   = pc_stacked;
+    // Exclude columns 3..k+2 from CSA (keep only the pc_stacked CSAs)
+    local k_x;
+    k_x              = cols(data) - 2;   // number of y + x columns
+    ctl_pc_s.no_xbar = seqa(1, 1, k_x)'; // exclude y and all x from CSA
+
+    // Suppress internal printing during estimation; print once below
+    local report_flag;
+    report_flag      = ctl.report;
+    ctl_pc_s.report  = 0;
+
+    // --- Estimate via cce_mg with PC augmentation ---
+    pcceO_s = cce_mg(data, ctl_pc_s);
+
+    // Update the model label to identify this as PC-CCE
+    pcceO_s.model = "CCE Mean Group [PC-CCE, m=" $+ ntos(num_pc, 1) $+ "]";
+
+    if report_flag;
+        __print_mg_output(pcceO_s);
+    endif;
+
+    retp(pcceO_s);
+endp;
+
+
+/*
+** __pc_er_criterion
+**
+** Eigenvalue Ratio (ER) criterion for automatic factor number selection.
+** Reference: Ahn & Horenstein (2013), Econometrica 81(3), 1203-1227.
+**
+** Input:  evals    m x 1 vector of eigenvalues (= squared singular values),
+**                  sorted descending.
+**         m_max    Maximum number of factors to consider.
+**
+** Output: m_hat    Selected number of factors (1-indexed).
+*/
+proc (1) = __pc_er_criterion(evals, m_max);
+    local ratios, m_hat, m;
+
+    if m_max <= 1;
+        retp(1);
+    endif;
+
+    // ER(j) = lambda(j) / lambda(j+1); protect against near-zero denominator
+    ratios = zeros(m_max - 1, 1);
+    for m(1, m_max - 1, 1);
+        if evals[m+1] > 1e-12;
+            ratios[m] = evals[m] / evals[m+1];
+        else;
+            ratios[m] = evals[m] / 1e-12;   // saturate
+        endif;
+    endfor;
+
+    // m_hat = argmax ER
+    m_hat = maxindc(ratios);
+    retp(m_hat);
+endp;

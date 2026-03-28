@@ -39,14 +39,23 @@ proc(1) = dcce_mg(data, ...);
           groupvar, timevar, zero_xx, zero_idx, ybarlags, xbarlags, PT, datevec,
           isbalanced, y_l, csa_vars, cd_nt, pvalue_cd_nt, meanrho, used;
     local e, dh_i1, dhname_i1, cumtivec, start_i, start_j, end_j, varname_cce_p;
+    local _yvar, _xvars;
 
     struct mgControl mgCtl_dflt;
     mgCtl_dflt = mgControlCreate();
 
     struct mgControl ctl;
-    ctl = dynargsGet(1, mgCtl_dflt);
 
-    // Variable selection by name (optional: reorder columns to [group, time, y, x...])
+    // Formula string support: dcce_mg(data, "y ~ x1 + x2" [, ctl])
+    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+        data = __selectVars(data, _yvar, _xvars);
+        ctl  = dynargsGet(2, mgCtl_dflt);
+    else;
+        ctl  = dynargsGet(1, mgCtl_dflt);
+    endif;
+
+    // Variable selection by name via control struct (overrides formula if both given)
     if ctl.y_var $!= "";
         data = __selectVars(data, ctl.y_var, ctl.x_vars);
     endif;
@@ -201,14 +210,23 @@ proc(1) = mg(data, ...);
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, groupvar,
           timevar, zero_xx, zero_idx, datevec, cd_nt, pvalue_cd_nt, meanrho, used;
     local start_j, end_j, varname_cce_p;
+    local _yvar, _xvars;
 
     struct mgControl mgCtl_dflt;
     mgCtl_dflt = mgControlCreate();
 
     struct mgControl ctl;
-    ctl = dynargsGet(1, mgCtl_dflt);
 
-    // Variable selection by name (optional: reorder columns to [group, time, y, x...])
+    // Formula string support: mg(data, "y ~ x1 + x2" [, ctl])
+    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+        data = __selectVars(data, _yvar, _xvars);
+        ctl  = dynargsGet(2, mgCtl_dflt);
+    else;
+        ctl  = dynargsGet(1, mgCtl_dflt);
+    endif;
+
+    // Variable selection by name via control struct (overrides formula if both given)
     if ctl.y_var $!= "";
         data = __selectVars(data, ctl.y_var, ctl.x_vars);
     endif;
@@ -286,14 +304,23 @@ proc(1) = cce_mg(data, ...);
           csa_vars, groupvar, timevar, zero_xx, zero_idx, datevec,
           cd_nt, pvalue_cd_nt, meanrho, used;
     local dh_i1, dhname_i1, start_j, end_j, varname_cce_p;
+    local _yvar, _xvars;
 
     struct mgControl mgCtl_dflt;
     mgCtl_dflt = mgControlCreate();
 
     struct mgControl ctl;
-    ctl = dynargsGet(1, mgCtl_dflt);
 
-    // Variable selection by name (optional: reorder columns to [group, time, y, x...])
+    // Formula string support: cce_mg(data, "y ~ x1 + x2" [, ctl])
+    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+        data = __selectVars(data, _yvar, _xvars);
+        ctl  = dynargsGet(2, mgCtl_dflt);
+    else;
+        ctl  = dynargsGet(1, mgCtl_dflt);
+    endif;
+
+    // Variable selection by name via control struct (overrides formula if both given)
     if ctl.y_var $!= "";
         data = __selectVars(data, ctl.y_var, ctl.x_vars);
     endif;

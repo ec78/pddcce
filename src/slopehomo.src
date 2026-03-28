@@ -14,7 +14,10 @@
 **    Delta       Asymptotically N(0,1) as N,T -> inf with sqrtN/T -> 0.
 **    Delta_tilde_adj   Bias-corrected version; preferred when T is small relative to N.
 **
-**  Format:  { delta, pval, delta_adj, pval_adj } = slopehomo(mgO)
+**  Format:  { delta, pval, delta_adj, pval_adj } = slopehomo(mgO [, report])
+**
+**  Optional positional argument (via ...):
+**           report    1 = print results table (default). 0 = suppress.
 **
 **  Input:   mgO     mgOut struct from mg(), cce_mg(), or dcce_mg().
 **                   Requires mgO.b_vec, mgO.b_mg, mgO.sig_vec, mgO.xxi_vec
@@ -29,7 +32,10 @@
 **           If mgO was produced by cce_mg / dcce_mg, the CSA augmentation
 **           variables are excluded automatically via mgO.numvars.
 */
-proc (4) = slopehomo(struct mgOut mgO);
+proc (4) = slopehomo(struct mgOut mgO, ...);
+
+    local report;
+    report = dynargsGet(1, 1);
 
     local n, k, b_vec, b_mg, sig_vec, xxi_vec_m;
     local i, xxi_i, xx_i, b_dm, S;
@@ -80,6 +86,10 @@ proc (4) = slopehomo(struct mgOut mgO);
         pval_adj = 2*cdfnc(abs(delta_adj));
     else;
         pval_adj = miss();
+    endif;
+
+    if report;
+        print_slopehomo(delta, pval, delta_adj, pval_adj);
     endif;
 
     retp(delta, pval, delta_adj, pval_adj);

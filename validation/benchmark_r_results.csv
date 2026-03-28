@@ -1,0 +1,7 @@
+"dataset","N","T","estimator","tool","time_sec"
+"Penn WTables",93,47,"MG","R/plm",0.0199999999999999
+"Penn WTables",93,47,"CCE-MG","R/plm",0.015
+"Simulated M",100,50,"MG","R/plm",0.02
+"Simulated M",100,50,"CCE-MG","R/plm",0.0199999999999999
+"Simulated L",200,100,"MG","R/plm",0.0499999999999998
+"Simulated L",200,100,"CCE-MG","R/plm",0.0449999999999999

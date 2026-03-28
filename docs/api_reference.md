@@ -30,6 +30,7 @@ This document provides a complete reference for all public procedures in dccelib
   - [print_cce_rank](#print_cce_rank)
   - [westerlundTest](#westerlundtest)
   - [print_westerlund](#print_westerlund)
+  - [pcce_mg](#pcce_mg)
 - [Bias Correction](#bias-correction)
   - [hpj](#hpj)
 - [Bootstrap Inference](#bootstrap-inference)
@@ -174,6 +175,7 @@ Embedded within `mgOut.pcce` when `mgCtl.pooled = 1`.
 **Mean Group estimator** (Pesaran and Smith 1995).
 
 ```gauss
+proc (1) = mg(data [, formula, mgCtl]);
 proc (1) = mg(data [, mgCtl]);
 ```
 
@@ -181,8 +183,13 @@ proc (1) = mg(data [, mgCtl]);
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `data` | Yes | Dataframe: [group, time, y, x₁, ..., xₖ]. Sorted by group then time. No missing values. |
+| `data` | Yes | Panel dataframe. Must contain group, time, and variable columns. |
+| `formula` | No | Formula string: `"y ~ x1 + x2"`. Selects and reorders columns from `data`. |
 | `mgCtl` | No | `mgControl` struct. If omitted, uses all defaults. |
+
+When `formula` is supplied, `data` may contain any set of columns in any order; the
+formula determines which are used as y and regressors. If `formula` is omitted, `data`
+must already be ordered `[group, time, y, x₁, ..., xₖ]` (or use `mgCtl.y_var` / `mgCtl.x_vars`).
 
 **Returns:** `mgOut` struct.
 
@@ -191,10 +198,20 @@ proc (1) = mg(data [, mgCtl]);
 - Use the returned `cd_stat` to test whether CCE correction is needed.
 - If `mgCtl.pooled = 1`, pooled OLS (without CSA augmentation) is estimated and stored in `mgOut.pcce`.
 
-**Example:**
+**Examples:**
 ```gauss
+// Formula string — columns can be in any order in 'data'
 struct mgOut mgO;
-mgO = mg(reg_data);
+mgO = mg(data, "log_rgdpo ~ log_ck + log_ngd");
+
+// Original API — pre-select and order columns manually
+mgO = mg(data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"]);
+
+// Formula + control struct
+struct mgControl ctl;
+ctl = mgControlCreate();
+ctl.report = 0;
+mgO = mg(data, "log_rgdpo ~ log_ck + log_ngd", ctl);
 ```
 
 ---
@@ -204,6 +221,7 @@ mgO = mg(reg_data);
 **CCE Mean Group estimator** (Pesaran 2006).
 
 ```gauss
+proc (1) = cce_mg(data [, formula, mgCtl]);
 proc (1) = cce_mg(data [, mgCtl]);
 ```
 
@@ -217,15 +235,19 @@ proc (1) = cce_mg(data [, mgCtl]);
 - If `mgCtl.i1 = 1`, adds first-differenced CSAs (Δȳ, Δx̄) for I(1) robustness.
 - If `mgCtl.two_way = 1`, time-demeans all variables before computing CSAs.
 - If `mgCtl.pooled = 1`, also runs pooled CCE with NW SE; results in `mgOut.pcce`.
+- Extra CSA variables (`mgCtl.x_csa`) must still be specified via the control struct.
 
-**Example:**
+**Examples:**
 ```gauss
+// Formula string
+struct mgOut cceO;
+cceO = cce_mg(data, "log_rgdpo ~ log_ck + log_ngd");
+
+// Formula + extra CSA variable
 struct mgControl ctl;
 ctl = mgControlCreate();
 ctl.x_csa = data[., "log_hc"];
-
-struct mgOut cceO;
-cceO = cce_mg(reg_data, ctl);
+cceO = cce_mg(data, "log_rgdpo ~ log_ck + log_ngd", ctl);
 ```
 
 ---
@@ -235,6 +257,7 @@ cceO = cce_mg(reg_data, ctl);
 **Dynamic CCE Mean Group estimator** (Chudik and Pesaran 2015).
 
 ```gauss
+proc (1) = dcce_mg(data [, formula, mgCtl]);
 proc (1) = dcce_mg(data [, mgCtl]);
 ```
 
@@ -247,16 +270,16 @@ proc (1) = dcce_mg(data [, mgCtl]);
 - Both `i1` and `two_way` flags are supported.
 - For small-T samples, follow with `hpj()` to correct O(1/T) bias.
 
-**Example:**
+**Examples:**
 ```gauss
+// Formula + dynamic lags via control struct
 struct mgControl ctl;
 ctl = mgControlCreate();
 ctl.y_lags  = 1;
 ctl.cr_lags = 3;
-ctl.x_csa   = data[., "log_hc"];
 
 struct mgOut dcceO;
-dcceO = dcce_mg(reg_data, ctl);
+dcceO = dcce_mg(data, "log_rgdpo ~ log_ck + log_ngd", ctl);
 ```
 
 ---
@@ -334,16 +357,19 @@ This procedure is called internally by all estimators. Access results via `mgOut
 **Pesaran (2007) CIPS panel unit root test.**
 
 ```gauss
-proc (2) = cips(data [, p, demean]);
+proc (2) = cips(data [, formula, p, demean, report]);
+proc (2) = cips(data [, p, demean, report]);
 ```
 
 **Arguments:**
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `data` | Yes | — | Dataframe with columns: [group, time, y]. |
+| `data` | Yes | — | Panel dataframe. When using a formula, may contain any columns. Without formula, must be ordered [group, time, y]. |
+| `formula` | No | — | Variable name string (e.g., `"log_rgdpo"`) to select the y column from `data`. No `~` required for this univariate test. |
 | `p` | No | Automatic | Number of augmentation lags. Automatic uses `floor(T^(1/4))`. |
-| `demean` | No | `0` | `0` = no trend, `1` = demeaned, `2` = with linear trend. |
+| `demean` | No | `1` | `1` = intercept only. `2` = intercept + trend. |
+| `report` | No | `1` | `1` = print results table. `0` = suppress output. |
 
 **Returns:**
 
@@ -362,11 +388,18 @@ proc (2) = cips(data [, p, demean]);
 
 Reject H₀ of unit root if `cips_stat` is more negative than the critical value.
 
-**Example:**
+**Examples:**
 ```gauss
+// Formula string — select variable from a wide dataframe
 local cips_stat, cadf_vec;
-{ cips_stat, cadf_vec } = cips(data[., "id" "year" "log_rgdpo"], 1, 0);
-print_cips(cips_stat, cadf_vec, 1, 0);
+{ cips_stat, cadf_vec } = cips(data, "log_rgdpo");
+
+// Formula + options
+{ cips_stat, cadf_vec } = cips(data, "log_rgdpo", 1, 2);      // trend
+{ cips_stat, cadf_vec } = cips(data, "log_rgdpo", 1, 1, 0);   // suppress output
+
+// Original API — pre-select columns
+{ cips_stat, cadf_vec } = cips(data[., "id" "year" "log_rgdpo"], 1);
 ```
 
 ---
@@ -376,10 +409,11 @@ print_cips(cips_stat, cadf_vec, 1, 0);
 Struct-returning wrapper for `cips()`.
 
 ```gauss
-proc (1) = cips_test(data [, p, demean]);
+proc (1) = cips_test(data [, formula, p, demean, report]);
+proc (1) = cips_test(data [, p, demean, report]);
 ```
 
-Returns a `cipsOut` struct with fields: `cips_stat`, `cadf_vec`, `p`, `demean`. Useful when you want a single object to store and pass CIPS results.
+Returns a `cipsOut` struct with fields: `cips_stat`, `cadf_vec`, `p`, `demean`. Supports the same formula string syntax as `cips()`. Prints by default (`report=1`); pass `report=0` to suppress.
 
 ---
 
@@ -400,14 +434,15 @@ proc (0) = print_cips(cips_stat, cadf_vec, p, demean);
 **Pesaran-Yamagata (2008) slope homogeneity test.**
 
 ```gauss
-proc (4) = slopehomo(mgO);
+proc (4) = slopehomo(mgO [, report]);
 ```
 
 **Arguments:**
 
-| Parameter | Description |
-|-----------|-------------|
-| `mgO` | `mgOut` struct. Must contain `xxi_vec`, `sig_vec`, and `b_vec` (populated by all core estimators). |
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `mgO` | Yes | — | `mgOut` struct. Must contain `xxi_vec`, `sig_vec`, and `b_vec` (populated by all core estimators). |
+| `report` | No | `1` | `1` = print results table. `0` = suppress output. |
 
 **Returns:**
 
@@ -426,9 +461,12 @@ proc (4) = slopehomo(mgO);
 
 **Example:**
 ```gauss
+// Prints automatically
 local delta, pval, delta_adj, pval_adj;
 { delta, pval, delta_adj, pval_adj } = slopehomo(cceO);
-print_slopehomo(delta, pval, delta_adj, pval_adj);
+
+// Suppress output
+{ delta, pval, delta_adj, pval_adj } = slopehomo(cceO, 0);
 ```
 
 ---
@@ -453,14 +491,19 @@ proc (0) = print_slopehomo(delta, pval, delta_adj, pval_adj);
 proc (1) = cce_rank(data [, mgCtl]);
 ```
 
-Tests whether the CSA matrix is full column rank (necessary condition for CCE consistency).
+Tests whether the CSA matrix is full column rank (necessary condition for CCE consistency). Printing is controlled by `mgCtl.report` (default `1` = print). Pass `ctl.report = 0` to suppress.
 
 **Returns:** `cceRankOut` struct with fields: `rank`, `k_csa`, `sing_vals`, `cond_num`, `pass`, `var_names`.
 
 **Example:**
 ```gauss
+// Prints automatically (default ctl has report=1)
 rankO = cce_rank(reg_data);
-print_cce_rank(rankO);
+
+// Suppress output
+ctl = mgControlCreate();
+ctl.report = 0;
+rankO = cce_rank(reg_data, ctl);
 ```
 
 ---
@@ -480,7 +523,8 @@ proc (0) = print_cce_rank(rankO);
 **Westerlund (2007) ECM-based panel cointegration test.**
 
 ```gauss
-proc (1) = westerlundTest(data [, p, demean]);
+proc (1) = westerlundTest(data [, formula, p, demean, report]);
+proc (1) = westerlundTest(data [, p, demean, report]);
 ```
 
 Tests H₀: no cointegration (αᵢ = 0 for all i) using four statistics: Gₜ, Gₐ (group-mean), Pₜ, Pₐ (panel). All are left-tailed.
@@ -489,16 +533,25 @@ Tests H₀: no cointegration (αᵢ = 0 for all i) using four statistics: Gₜ, 
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `data` | Yes | — | Dataframe: [group, time, y, x₁, ..., xₖ]. |
+| `data` | Yes | — | Panel dataframe. When using a formula, may contain any columns. Without formula, must be ordered [group, time, y, x₁, ..., xₖ]. |
+| `formula` | No | — | Formula string: `"y ~ x1 + x2"`. Selects and reorders columns from `data`. |
 | `p` | No | `0` (auto) | Lag order for the ECM. Auto uses `floor(T^(1/3))`. |
 | `demean` | No | `1` | `1` = intercept only; `2` = intercept + trend. |
+| `report` | No | `1` | `1` = print results table. `0` = suppress output. |
 
 **Returns:** `westerlundOut` struct with fields: `Gt`, `Ga`, `Pt`, `Pa`, `alpha_vec`, `se_vec`, `p`, `demean`, `n_valid`.
 
-**Example:**
+**Examples:**
 ```gauss
+// Formula string
+struct westerlundOut wO;
+wO = westerlundTest(data, "log_rgdpo ~ log_ck + log_ngd");
+
+// Formula + suppress output
+wO = westerlundTest(data, "log_rgdpo ~ log_ck", 0, 1, 0);
+
+// Original API
 wO = westerlundTest(data[., "id" "year" "log_rgdpo" "log_ck"]);
-print_westerlund(wO);
 ```
 
 ---
@@ -509,6 +562,49 @@ Prints Westerlund test results.
 
 ```gauss
 proc (0) = print_westerlund(wO);
+```
+
+### pcce_mg
+
+**Principal Component CCE Mean Group (PC-CCE-MG) estimator.** Uses PCA on the cross-sectional average matrix to construct factor proxies, improving CCE robustness when the rank condition is borderline or when the number of common factors exceeds the number of observables.
+
+**Requires:** GAUSS Machine Learning (GML) library (`library gml;`).
+
+```gauss
+proc (1) = pcce_mg(data [, formula, mgCtl, num_pc]);
+proc (1) = pcce_mg(data [, mgCtl, num_pc]);
+```
+
+**Arguments:**
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `data` | Yes | — | Panel dataframe. When using a formula, may contain any columns. |
+| `formula` | No | — | Formula string: `"y ~ x1 + x2"`. Selects and reorders columns from `data`. |
+| `mgCtl` | No | defaults | `mgControl` struct. All standard fields apply. |
+| `num_pc` | No | `0` (auto) | Number of principal components to retain. `0` = automatic selection via the Ahn-Horenstein (2013) eigenvalue ratio criterion. |
+
+**Returns:** `mgOut` struct. Same fields as `cce_mg()`. The `.model` string reads `"CCE Mean Group [PC-CCE, m=<num_pc>]"`.
+
+**Notes:**
+- Automatically checks for GML availability. If `pcaFit` is not found, exits with an informative error.
+- The ER criterion caps at `k+1` (total CSA columns). For most panels, the auto-selected number equals the number of dominant eigenvalues.
+- Use `cce_rank()` first to diagnose whether PCA augmentation is needed.
+
+**Example:**
+```gauss
+library dccelib, gml;
+
+struct mgControl ctl;
+ctl = mgControlCreate();
+ctl.x_csa = data[., "log_hc"];
+
+// Auto PC selection
+struct mgOut pcceO;
+pcceO = pcce_mg(reg_data, ctl);
+
+// Force 2 PCs
+pcceO = pcce_mg(reg_data, ctl, 2);
 ```
 
 ---
@@ -645,12 +741,17 @@ proc (1) = mgBootstrapSE(data, mgCtl [, B, estimator_type]);
 **Long-run multipliers** from a DCCE-MG model with lagged y.
 
 ```gauss
-proc (1) = longRunMG(mgO);
+proc (1) = longRunMG(mgO [, report]);
 ```
 
-Computes LR_j = β_j / (1 − Σφ) with delta-method standard errors, where φ are the lagged-y coefficients and β_j is the short-run coefficient on xⱼ.
+Computes LR_j = β_j / (1 − Σφ) with delta-method standard errors, where φ are the lagged-y coefficients and β_j is the short-run coefficient on xⱼ. Prints by default (`report=1`).
 
-**Arguments:** `mgO` from `dcce_mg()` with `y_lags_used >= 1`.
+**Arguments:**
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `mgO` | Yes | — | `mgOut` from `dcce_mg()` with `y_lags_used >= 1`. |
+| `report` | No | `1` | `1` = print results table. `0` = suppress output. |
 
 **Returns:** `longRunOut` struct with fields: `lr_coef`, `lr_se`, `lr_tvalue`, `lr_pval`, `adj_speed`, `x_names`.
 
@@ -659,8 +760,8 @@ Computes LR_j = β_j / (1 − Σφ) with delta-method standard errors, where φ 
 ctl = mgControlCreate();
 ctl.y_lags = 1;
 cceO = dcce_mg(reg_data, ctl);
-lrO  = longRunMG(cceO);
-print_longRun(lrO);
+lrO  = longRunMG(cceO);       // prints automatically
+lrO  = longRunMG(cceO, 0);    // suppress output
 ```
 
 ---

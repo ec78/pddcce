@@ -70,25 +70,18 @@ print "=================================================================";
 print "STEP 2: CIPS Panel Unit Root Tests (Pesaran 2007)";
 print "=================================================================";
 
-// Test log_rgdpo (p=1 augmentation lag)
+// Test each series — cips() prints results automatically (report=1 by default)
 print "--- log_rgdpo (Real GDP, log) ---";
 { cips_stat, cadf_vec } = cips(data[., "id" "year" "log_rgdpo"], 1);
-print_cips(cips_stat, cadf_vec, 1, 0);
 
-// Test log_ck (p=1)
 print "--- log_ck (Capital share, log) ---";
 { cips_stat, cadf_vec } = cips(data[., "id" "year" "log_ck"], 1);
-print_cips(cips_stat, cadf_vec, 1, 0);
 
-// Test log_ngd (p=1)
 print "--- log_ngd (Pop. growth + break-even, log) ---";
 { cips_stat, cadf_vec } = cips(data[., "id" "year" "log_ngd"], 1);
-print_cips(cips_stat, cadf_vec, 1, 0);
 
-// Test log_hc (p=1)
 print "--- log_hc (Human capital, log) ---";
 { cips_stat, cadf_vec } = cips(data[., "id" "year" "log_hc"], 1);
-print_cips(cips_stat, cadf_vec, 1, 0);
 
 print;
 print "If series are I(1): use ctl.i1=1 for the KPY (2011) extension,";
@@ -117,8 +110,8 @@ cceCtl.report  = 0;    // suppress estimator output for this step
 struct mgOut cceO;
 cceO = cce_mg(reg_data, cceCtl);
 
+// slopehomo() prints results automatically (report=1 by default)
 { delta, pval, delta_adj, pval_adj } = slopehomo(cceO);
-print_slopehomo(delta, pval, delta_adj, pval_adj);
 
 print;
 print "Interpretation:";

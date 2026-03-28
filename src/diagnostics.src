@@ -120,13 +120,16 @@ endp;
 **             .pass        1 if rank == k_csa (rank condition met), 0 otherwise
 **             .var_names   String array of variable names included in the CSA
 **
-**  Usage:
-**    rankO = cce_rank(data);
-**    print_cce_rank(rankO);
+**  Printing:  Controlled by mgCtl.report (default 1 = print). Pass
+**             ctl.report = 0 to suppress output.
 **
-**    // With extra CSA variable:
+**  Usage:
+**    rankO = cce_rank(data);                    // prints by default
+**    rankO = cce_rank(data, ctl);               // ctl.report controls print
+**
+**    // Suppress output:
 **    ctl = mgControlCreate();
-**    ctl.x_csa = extra_var_column;
+**    ctl.report = 0;
 **    rankO = cce_rank(data, ctl);
 */
 proc (1) = cce_rank(data, ...);
@@ -180,6 +183,10 @@ proc (1) = cce_rank(data, ...);
     rankO.cond_num  = cond_num;
     rankO.pass      = (rank_est == n_csa);
     rankO.var_names = yname $| xnames;
+
+    if ctl.report;
+        print_cce_rank(rankO);
+    endif;
 
     retp(rankO);
 endp;
@@ -340,9 +347,12 @@ endp;
 **    Modelling Approach to Cointegration Analysis. In Strom (ed.),
 **    Econometrics and Economic Theory in the 20th Century.
 **
-**  Format:  lrO = longRunMG(mgO)
+**  Format:  lrO = longRunMG(mgO [, report])
 **
 **  Input:   mgO     mgOut struct from dcce_mg() with y_lags_used >= 1.
+**
+**  Optional positional argument (via ...):
+**           report    1 = print results table (default). 0 = suppress.
 **
 **  Output:  lrO     longRunOut struct:
 **             .lr_coef    kx1 long-run multipliers
@@ -356,10 +366,13 @@ endp;
 **    ctl = mgControlCreate();
 **    ctl.y_lags = 1;
 **    cceO = dcce_mg(data, ctl);
-**    lrO  = longRunMG(cceO);
-**    print_longRun(lrO);
+**    lrO  = longRunMG(cceO);        // prints by default
+**    lrO  = longRunMG(cceO, 0);     // suppress output
 */
-proc (1) = longRunMG(struct mgOut mgO);
+proc (1) = longRunMG(struct mgOut mgO, ...);
+    local report;
+    report = dynargsGet(1, 1);
+
     local p, k, k_x, phi, beta, sum_phi, rho, lr_coef, lr_se, lr_tval, lr_pval;
     local grad, j;
     struct longRunOut lrO;
@@ -404,6 +417,10 @@ proc (1) = longRunMG(struct mgOut mgO);
     lrO.lr_pval   = lr_pval;
     lrO.adj_speed = sum_phi - 1;           // negative if model converges
     lrO.x_names   = mgO.mg_vars[p+1:k];
+
+    if report;
+        print_longRun(lrO);
+    endif;
 
     retp(lrO);
 endp;
