@@ -64,7 +64,7 @@
 **    rankO = cce_rank(reg_data);               // check raw CSA rank
 **    print_cce_rank(rankO);
 */
-proc (1) = pcce_mg(data, ...);
+proc (struct mgOut) = pcce_mg(data, ...);
 
     local num_pc, m_auto;
     local ctl_dflt, varnames;
@@ -134,7 +134,6 @@ proc (1) = pcce_mg(data, ...);
 
     // --- Run PCA via GML pcaFit ---
     // pcaFit expects a T x p matrix; returns pcaOut struct with .scores (T x m)
-    local pO;
     struct pcaOut pO_s;
     pO_s = pcaFit(csa_raw, num_pc);
 
@@ -191,7 +190,6 @@ proc (1) = pcce_mg(data, ...);
 
     // Build a modified ctl: use pc_stacked as x_csa, exclude all original
     // y and x from CSA via no_xbar (columns 3 through k+2)
-    local ctl_pc;
     struct mgControl ctl_pc_s;
     ctl_pc_s         = ctl;
     ctl_pc_s.x_csa   = pc_stacked;

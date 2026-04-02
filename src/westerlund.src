@@ -47,7 +47,7 @@
 **    // With lags and trend, suppress output:
 **    wO = westerlundTest(data, 2, 2, 0);
 */
-proc (1) = westerlundTest(data, ...);
+proc (struct westerlundOut) = westerlundTest(data, ...);
     local p, demean, report;
     local varnames, groupvar, timevar;
     local idvec, tvec, n, cumtivec, T_bar;

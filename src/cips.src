@@ -251,7 +251,7 @@ endp;
 **    cO = cips_test(data[., "id" "year" "log_rgdpo"]);
 **    cO = cips_test(data[., "id" "year" "log_rgdpo"], 1, 1, 0);  // suppress
 */
-proc (1) = cips_test(data, ...);
+proc (struct cipsOut) = cips_test(data, ...);
     local p, demean, report, _formula;
     struct cipsOut cO;
 

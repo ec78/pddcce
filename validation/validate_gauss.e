@@ -63,11 +63,9 @@ print "";
 
 reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
 
-struct mgControl mgCtl;
 mgCtl = mgControlCreate();
 mgCtl.report = 0;    // suppress auto-print; we print manually below
 
-struct mgOut mgO;
 mgO = mg(reg_data, mgCtl);
 
 print_coef_table(mgO);
@@ -82,11 +80,9 @@ print "  CSA: ybar, log_ck_bar, log_ngd_bar (default — no x_csa)";
 print "============================================================";
 print "";
 
-struct mgControl cceCtl;
 cceCtl = mgControlCreate();
 cceCtl.report = 0;
 
-struct mgOut cceO;
 cceO = cce_mg(reg_data, cceCtl);
 
 print_coef_table(cceO);
@@ -101,14 +97,12 @@ print "  y_lags=1, cr_lags=3, x_csa=log_hc";
 print "============================================================";
 print "";
 
-struct mgControl dcceCtl;
 dcceCtl = mgControlCreate();
 dcceCtl.y_lags  = 1;
 dcceCtl.cr_lags = 3;
 dcceCtl.x_csa   = data[., "log_hc"];
 dcceCtl.report  = 0;
 
-struct mgOut dcceO;
 dcceO = dcce_mg(reg_data, dcceCtl);
 
 print_coef_table(dcceO);

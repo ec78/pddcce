@@ -15,7 +15,6 @@ data = packr(loadd(fname, ". + date($year, '%Y')"));
 data = order(data, "id"$|"year");
 
 // Control structure
-struct mgControl mgCtl;
 mgCtl = mgControlCreate();
 
 // Implement lag of y
@@ -32,5 +31,4 @@ mgCtl.x_csa = data[., "log_hc"];
 reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
 
 // Call regression
-struct mgOut mgO;
 mgO = dcce_mg(reg_data, mgctl);

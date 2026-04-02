@@ -33,17 +33,14 @@ reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
 
 // MG
 print "Estimating MG...";
-struct mgOut mgO;
 mgO = mg(reg_data);
 
 // CCE-MG
 print "Estimating CCE-MG...";
-struct mgControl ctl;
 ctl = mgControlCreate();
 ctl.x_csa  = data[., "log_hc"];
 ctl.report = 0;
 
-struct mgOut cceO;
 cceO = cce_mg(reg_data, ctl);
 
 // DCCE-MG
@@ -51,7 +48,6 @@ print "Estimating DCCE-MG...";
 ctl.y_lags  = 1;
 ctl.cr_lags = 3;
 
-struct mgOut dcceO;
 dcceO = dcce_mg(reg_data, ctl);
 print;
 

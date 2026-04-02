@@ -44,7 +44,6 @@ print "=================================================================";
 print "STEP 1: MG Baseline — CD Diagnostic";
 print "=================================================================";
 
-struct mgOut mgO;
 mgO = mg(reg_data);
 
 // CD stat is also printed in the output table, but access it directly:
@@ -102,12 +101,10 @@ print "=================================================================";
 print "STEP 3: Slope Homogeneity Test (Pesaran-Yamagata 2008)";
 print "=================================================================";
 
-struct mgControl cceCtl;
 cceCtl = mgControlCreate();
 cceCtl.x_csa   = data[., "log_hc"];
 cceCtl.report  = 0;    // suppress estimator output for this step
 
-struct mgOut cceO;
 cceO = cce_mg(reg_data, cceCtl);
 
 // slopehomo() prints results automatically (report=1 by default)

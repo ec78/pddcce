@@ -18,5 +18,4 @@ data = loadd(fname, ". + date($year, '%Y')");
 reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
 
 // Call regression
-struct mgOut mgO;
 mgO = mg(packr(reg_data));

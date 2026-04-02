@@ -17,5 +17,4 @@ data = packr(loadd(fname, ". + date($year, '%Y')"));
 reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
 
 // Call regression
-struct mgOut cceO;
 cceO = cce_mg(packr(reg_data));

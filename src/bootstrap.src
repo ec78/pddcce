@@ -51,7 +51,6 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
     local se_boot;
     struct mgControl ctl_boot;
     struct mgOut mgO_orig, mgO_b;
-
     { B, estimator_type } = dynargsGet(1|2, 999, "cce_mg");
 
     // Disable reporting during bootstrap iterations
@@ -180,11 +179,10 @@ endp;
 **    print mgO.b_mg;
 **    print mgO.se_mg;    // bootstrap SEs
 */
-proc (1) = mgBootstrapSE(data, struct mgControl ctl, ...);
+proc (struct mgOut) = mgBootstrapSE(data, struct mgControl ctl, ...);
     local B, estimator_type, se_boot, b_boot, k, results_boot;
     struct mgControl ctl_silent;
     struct mgOut mgO;
-
     { B, estimator_type } = dynargsGet(1|2, 999, "cce_mg");
 
     // Estimate the model (honours ctl.report for the initial estimation)

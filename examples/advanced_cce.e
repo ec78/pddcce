@@ -55,12 +55,10 @@ print "=================================================================";
 print "OPTION 1: Pooled CCE (NW SE) alongside CCE-MG";
 print "=================================================================";
 
-struct mgControl ctl1;
 ctl1 = mgControlCreate();
 ctl1.x_csa  = data[., "log_hc"];
 ctl1.pooled = 1;    // also run pooled CCE in the same call
 
-struct mgOut cceO_pooled;
 cceO_pooled = cce_mg(reg_data, ctl1);
 
 // MG estimates are in cceO_pooled (printed automatically above)
@@ -90,12 +88,10 @@ print "=================================================================";
 print "OPTION 2: I(1) Extension — KPY (2011)  [ctl.i1 = 1]";
 print "=================================================================";
 
-struct mgControl ctl2;
 ctl2 = mgControlCreate();
 ctl2.x_csa = data[., "log_hc"];
 ctl2.i1    = 1;    // add first-differenced CSAs to h matrix
 
-struct mgOut cceO_i1;
 cceO_i1 = cce_mg(reg_data, ctl2);
 
 print;
@@ -121,12 +117,10 @@ print "=================================================================";
 print "OPTION 3: Two-Way CCE  [ctl.two_way = 1]";
 print "=================================================================";
 
-struct mgControl ctl3;
 ctl3 = mgControlCreate();
 ctl3.x_csa   = data[., "log_hc"];
 ctl3.two_way = 1;    // time-demean y, x, x_csa before CCE augmentation
 
-struct mgOut cceO_2way;
 cceO_2way = cce_mg(reg_data, ctl3);
 
 print;
@@ -144,7 +138,6 @@ print "=================================================================";
 print "COMBINED: DCCE-MG with I(1) extension + pooled CCE";
 print "=================================================================";
 
-struct mgControl ctl4;
 ctl4 = mgControlCreate();
 ctl4.y_lags  = 1;
 ctl4.cr_lags = 3;
@@ -152,7 +145,6 @@ ctl4.x_csa   = data[., "log_hc"];
 ctl4.i1      = 1;    // I(1) extension
 ctl4.pooled  = 1;    // also estimate pooled CCE
 
-struct mgOut dcceO_full;
 dcceO_full = dcce_mg(reg_data, ctl4);
 
 print;

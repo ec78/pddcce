@@ -49,7 +49,6 @@ print "=================================================================";
 print "PART 1: Half-Panel Jackknife (HPJ) Bias Correction";
 print "=================================================================";
 
-struct mgControl ctl;
 ctl = mgControlCreate();
 ctl.y_lags  = 1;
 ctl.cr_lags = 3;
@@ -57,13 +56,11 @@ ctl.x_csa   = data[., "log_hc"];
 
 // Step 1: full-sample DCCE-MG (uncorrected baseline)
 print "--- Full-sample DCCE-MG (uncorrected) ---";
-struct mgOut dcceO;
 dcceO = dcce_mg(reg_data, ctl);
 
 // Step 2: HPJ-corrected DCCE-MG
 print;
 print "--- HPJ bias-corrected DCCE-MG ---";
-struct mgOut hpjO;
 hpjO = hpj(reg_data, ctl, "dcce_mg");
 
 // Compare full-sample vs. HPJ estimates
@@ -88,11 +85,9 @@ print hpjO.b_stats_hpj;
 // -----------------------------------------------------------------------
 print;
 print "--- HPJ bias-corrected CCE-MG ---";
-struct mgControl cce_ctl;
 cce_ctl = mgControlCreate();
 cce_ctl.x_csa = data[., "log_hc"];
 
-struct mgOut hpjO_cce;
 hpjO_cce = hpj(reg_data, cce_ctl, "cce_mg");
 
 
@@ -164,7 +159,6 @@ print "=================================================================";
 print "PART 3: Bootstrap SE applied directly to CCE-MG (faster)";
 print "=================================================================";
 
-struct mgControl cce_ctl2;
 cce_ctl2 = mgControlCreate();
 cce_ctl2.x_csa = data[., "log_hc"];
 

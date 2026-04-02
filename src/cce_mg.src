@@ -32,7 +32,7 @@
 **             .cd_stat / .cd_pval   Pesaran (2004) CD test
 **             .pcce           Pooled CCE results (pcceNWOut, if .pooled=1)
 */
-proc(1) = dcce_mg(data, ...);
+proc (struct mgOut) = dcce_mg(data, ...);
     local idvec, tvec, t_n, starttvec,
           endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h,
@@ -42,9 +42,8 @@ proc(1) = dcce_mg(data, ...);
     local _yvar, _xvars;
 
     struct mgControl mgCtl_dflt;
-    mgCtl_dflt = mgControlCreate();
-
     struct mgControl ctl;
+    mgCtl_dflt = mgControlCreate();
 
     // Formula string support: dcce_mg(data, "y ~ x1 + x2" [, ctl])
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
@@ -204,7 +203,7 @@ endp;
 **
 **  Input/Output: see dcce_mg header (same struct types, simpler model).
 */
-proc(1) = mg(data, ...);
+proc (struct mgOut) = mg(data, ...);
     local idvec, tvec, t_n, starttvec,
           endtvec, miny, maxy, mint, maxt, n, ivec, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, groupvar,
@@ -213,9 +212,8 @@ proc(1) = mg(data, ...);
     local _yvar, _xvars;
 
     struct mgControl mgCtl_dflt;
-    mgCtl_dflt = mgControlCreate();
-
     struct mgControl ctl;
+    mgCtl_dflt = mgControlCreate();
 
     // Formula string support: mg(data, "y ~ x1 + x2" [, ctl])
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
@@ -297,7 +295,7 @@ endp;
 **
 **  Input/Output: see dcce_mg header.
 */
-proc(1) = cce_mg(data, ...);
+proc (struct mgOut) = cce_mg(data, ...);
     local idvec, tvec, t_n, starttvec,
           endtvec, miny, maxy, mint, maxt, n, ivec, data_bar, ybar, ybarname,
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h,
@@ -307,9 +305,8 @@ proc(1) = cce_mg(data, ...);
     local _yvar, _xvars;
 
     struct mgControl mgCtl_dflt;
-    mgCtl_dflt = mgControlCreate();
-
     struct mgControl ctl;
+    mgCtl_dflt = mgControlCreate();
 
     // Formula string support: cce_mg(data, "y ~ x1 + x2" [, ctl])
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
@@ -421,7 +418,7 @@ endp;
 ** Called by mg, cce_mg, dcce_mg after data matrices are assembled.
 ** Now also computes: per-group R^2, CI, heterogeneity stats, xxi_vec.
 */
-proc(1) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
+proc (struct mgOut) = _mg(yname, xname, y, x, n, tivec, zero_x, zero_id, ...);
 
     local namevar, cumtivec, x_mg, k, i, y_i, x_i, b_i, e_i, inverse_x_x, sig_i, sig2_i;
     local b_vec, sig_vec, out_mg, r2_vec, xxi_vec_m, r2_i;
@@ -604,7 +601,7 @@ endp;
 **             .cov_pcce_rbst_nw   NW robust covariance
 **             .cov_pcce_hs2       Pesaran NP covariance
 */
-proc(1) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
+proc (struct pcceNWOut) = pcceNW(varname_cce, y, x, h, n, tivec, b_vec_mg, ...);
 
     local PT, cumtivec, y_t, x_t, h_t, tivec_t;
     local keep_rows, offset, i_t, r1, r2, keep_n;

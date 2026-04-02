@@ -35,7 +35,6 @@ endp;
 // -----------------------------------------------------------------------
 proc (1) = _time_mg(data, ctl, B);
     local times, i, t0;
-    struct mgOut mgO;
     times = zeros(B, 1);
     i = 1;
     do while i <= B;
@@ -49,7 +48,6 @@ endp;
 
 proc (1) = _time_cce(data, ctl, B);
     local times, i, t0;
-    struct mgOut cceO;
     times = zeros(B, 1);
     i = 1;
     do while i <= B;
@@ -63,7 +61,6 @@ endp;
 
 proc (1) = _time_dcce(data, ctl, B);
     local times, i, t0;
-    struct mgOut dcceO;
     times = zeros(B, 1);
     i = 1;
     do while i <= B;
@@ -90,7 +87,6 @@ endp;
 
 proc (1) = _time_west(data, ctl, B);
     local times, i, t0;
-    struct westerlundOut wO;
     times = zeros(B, 1);
     i = 1;
     do while i <= B;
@@ -113,11 +109,8 @@ penn_reg = penn[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
 N_penn = rows(unique(penn[., "id"]));
 T_penn = rows(unique(penn[., "year"]));
 
-struct mgControl ctl;
 ctl = mgControlCreate();
 ctl.report = 0;
-
-struct mgControl ctl2;
 
 // Rename penn columns to match sim naming for cips
 penn_y = setcolnames(penn[., "id" "year" "log_rgdpo"], "id"$|"year"$|"y");
@@ -171,9 +164,6 @@ print "";
 // -----------------------------------------------------------------------
 // Simulated panels
 // -----------------------------------------------------------------------
-struct mgControl ctl3;
-struct mgControl ctl4;
-
 sim_N = 100 | 200;
 sim_T = 50  | 100;
 sim_names = "Simulated M" $| "Simulated L";

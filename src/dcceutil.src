@@ -54,9 +54,8 @@ proc (0) = __print_mg_output(struct mgOut mgO);
 endp;
 
 
-proc (1) = mgControlCreate();
+proc (struct mgControl) = mgControlCreate();
     struct mgControl ctl;
-
     ctl.no_xbar  = 0;
     ctl.zero_x   = 0;
     ctl.zero_id  = 0;
@@ -906,7 +905,6 @@ proc (1) = lagSelect(data, struct mgControl ctl, p_max, ...);
     local results, aic_row, bic_row, wid, marker;
     struct mgControl ctl_j;
     struct mgOut mgO_j;
-
     estimator_type = dynargsGet(1, "cce_mg");
 
     if estimator_type $== "mg";
