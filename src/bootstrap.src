@@ -40,9 +40,8 @@
 **    // Replace NP SE with bootstrap SE:
 **    mgO.se_mg = se_boot;
 */
-proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
+proc (2) = mgBootstrap(data, struct mgControl ctl, B=999, estimator="cce_mg");
 
-    local B, estimator_type;
     local n, k, b_boot, b_iter;
     local groupvar, timevar, idvec, tvec, cumtivec_full;
     local data_boot, r1, r2, i_g;
@@ -51,14 +50,13 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
     local se_boot;
     struct mgControl ctl_boot;
     struct mgOut mgO_orig, mgO_b;
-    { B, estimator_type } = dynargsGet(1|2, 999, "cce_mg");
 
     // Disable reporting during bootstrap iterations
     ctl_boot = ctl;
     ctl_boot.report = 0;
 
-    // Get original estimates (validates estimator_type via __mg_call)
-    mgO_orig = __mg_call(data, ctl_boot, estimator_type);
+    // Get original estimates (validates estimator via __mg_call)
+    mgO_orig = __mg_call(data, ctl_boot, estimator);
 
     n      = mgO_orig.ngroups;
     k      = mgO_orig.numvars;
@@ -134,7 +132,7 @@ proc (2) = mgBootstrap(data, struct mgControl ctl, ...);
         endfor;
 
         // Re-estimate on bootstrap data
-        mgO_b = __mg_call(data_boot, ctl_boot, estimator_type);
+        mgO_b = __mg_call(data_boot, ctl_boot, estimator);
 
         b_boot[b_iter, .] = mgO_b.b_mg[1:k]';
         b_iter = b_iter + 1;
@@ -158,13 +156,13 @@ endp;
 **    { se_boot, b_boot } = mgBootstrap(data, ctl, B);
 **    mgO.se_mg = se_boot;        // manual replacement
 **
-**  Format:  mgO = mgBootstrapSE(data, mgCtl [, B, estimator_type])
+**  Format:  mgO = mgBootstrapSE(data, mgCtl [, B, estimator])
 **
 **  Input:   data            Panel dataframe (same format as cce_mg etc.)
 **           mgCtl           mgControl struct. Set ctl.report = 0 to suppress output
 **                           during bootstrap replications (recommended).
 **           B               Number of bootstrap replications. Default 999.
-**           estimator_type  "mg", "cce_mg" (default), or "dcce_mg".
+**           estimator  "mg", "cce_mg" (default), or "dcce_mg".
 **
 **  Output:  mgO     mgOut struct with:
 **             .se_mg  = bootstrap SEs (replacing NP SEs)
@@ -179,19 +177,18 @@ endp;
 **    print mgO.b_mg;
 **    print mgO.se_mg;    // bootstrap SEs
 */
-proc (struct mgOut) = mgBootstrapSE(data, struct mgControl ctl, ...);
-    local B, estimator_type, se_boot, b_boot, k, results_boot;
+proc (struct mgOut) = mgBootstrapSE(data, struct mgControl ctl, B=999, estimator="cce_mg");
+    local se_boot, b_boot, k, results_boot;
     struct mgControl ctl_silent;
     struct mgOut mgO;
-    { B, estimator_type } = dynargsGet(1|2, 999, "cce_mg");
 
     // Estimate the model (honours ctl.report for the initial estimation)
-    mgO = __mg_call(data, ctl, estimator_type);
+    mgO = __mg_call(data, ctl, estimator);
 
     // Bootstrap SEs (always silent during replications)
     ctl_silent        = ctl;
     ctl_silent.report = 0;
-    { se_boot, b_boot } = mgBootstrap(data, ctl_silent, B, estimator_type);
+    { se_boot, b_boot } = mgBootstrap(data, ctl_silent, B=B, estimator=estimator);
 
     // Replace NP SE with bootstrap SE for MG variables (first numvars elements)
     k = mgO.numvars;

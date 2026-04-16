@@ -32,10 +32,7 @@
 **           If mgO was produced by cce_mg / dcce_mg, the CSA augmentation
 **           variables are excluded automatically via mgO.numvars.
 */
-proc (4) = slopehomo(struct mgOut mgO, ...);
-
-    local report;
-    report = dynargsGet(1, 1);
+proc (4) = slopehomo(struct mgOut mgO, report=1);
 
     local n, k, b_vec, b_mg, sig_vec, xxi_vec_m;
     local i, xxi_i, xx_i, b_dm, S;

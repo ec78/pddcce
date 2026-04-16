@@ -47,8 +47,7 @@
 **    // With lags and trend, suppress output:
 **    wO = westerlundTest(data, 2, 2, 0);
 */
-proc (struct westerlundOut) = westerlundTest(data, ...);
-    local p, demean, report;
+proc (struct westerlundOut) = westerlundTest(data, formula="", p=0, demean=1, report=1);
     local varnames, groupvar, timevar;
     local idvec, tvec, n, cumtivec, T_bar;
     local p_act, k;
@@ -59,16 +58,13 @@ proc (struct westerlundOut) = westerlundTest(data, ...);
     local alpha_vec, se_vec, tau_vec;
     local valid, alpha_v, se_v, tau_v, n_valid;
     local G_t, Ga, Pt, Pa, prec_sum, alpha_P, se_P;
-    local _yvar, _xvars;
     struct westerlundOut wO;
 
-    // Formula string support: westerlundTest(data, "y ~ x1 + x2" [, p, demean, report])
-    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
-        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+    // Formula string support: westerlundTest(data, formula="log_rgdpo ~ log_ck")
+    if strlen(formula) > 0;
+        local _yvar, _xvars;
+        { _yvar, _xvars } = __parse_formula(formula);
         data = __selectVars(data, _yvar, _xvars);
-        { p, demean, report } = dynargsGet(2|4, 0, 1, 1);
-    else;
-        { p, demean, report } = dynargsGet(1|3, 0, 1, 1);
     endif;
 
     varnames = getcolnames(data);

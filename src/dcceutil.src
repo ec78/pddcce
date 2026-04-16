@@ -881,13 +881,13 @@ endp;
 **  Output suppression: all estimation runs use report = 0 internally,
 **  so no intermediate output is printed regardless of ctl.report.
 **
-**  Format:  results = lagSelect(data, mgCtl, p_max [, estimator_type])
+**  Format:  results = lagSelect(data, mgCtl, p_max [, estimator])
 **
 **  Input:   data            Panel dataframe (same format as cce_mg etc.)
 **           mgCtl           mgControl struct. ctl.y_lags is preserved across
 **                           all runs; only cr_lags is varied.
 **           p_max           Maximum number of CSA lags to test.
-**           estimator_type  Optional. "cce_mg" (default) or "dcce_mg".
+**           estimator  Optional. "cce_mg" (default) or "dcce_mg".
 **
 **  Output:  results         (p_max+1) x 4 matrix:
 **                             col 1: cr_lags (0 = no lags, 1..p_max = specific)
@@ -900,14 +900,13 @@ endp;
 **    results = lagSelect(data, ctl, 6);              // CCE-MG, up to 6 CSA lags
 **    results = lagSelect(data, ctl, 4, "dcce_mg");   // DCCE-MG
 */
-proc (1) = lagSelect(data, struct mgControl ctl, p_max, ...);
-    local estimator_type, j, p_auto;
+proc (1) = lagSelect(data, struct mgControl ctl, p_max, estimator="cce_mg");
+    local j, p_auto;
     local results, aic_row, bic_row, wid, marker;
     struct mgControl ctl_j;
     struct mgOut mgO_j;
-    estimator_type = dynargsGet(1, "cce_mg");
 
-    if estimator_type $== "mg";
+    if estimator $== "mg";
         print "lagSelect: CSA lag selection is not applicable to the plain MG estimator.";
         retp(miss());
     endif;
@@ -919,7 +918,7 @@ proc (1) = lagSelect(data, struct mgControl ctl, p_max, ...);
     ctl_j         = ctl;
     ctl_j.report  = 0;
     ctl_j.cr_lags = -1;
-    mgO_j = __mg_call(data, ctl_j, estimator_type);
+    mgO_j = __mg_call(data, ctl_j, estimator);
     results[1, .] = 0 ~ mgO_j.loglik ~ mgO_j.aic ~ mgO_j.bic;
 
     // Rows 2..p_max+1: cr_lags = 1..p_max
@@ -927,7 +926,7 @@ proc (1) = lagSelect(data, struct mgControl ctl, p_max, ...);
         ctl_j         = ctl;
         ctl_j.report  = 0;
         ctl_j.cr_lags = j;
-        mgO_j = __mg_call(data, ctl_j, estimator_type);
+        mgO_j = __mg_call(data, ctl_j, estimator);
         results[j+1, .] = j ~ mgO_j.loglik ~ mgO_j.aic ~ mgO_j.bic;
     endfor;
 
@@ -939,7 +938,7 @@ proc (1) = lagSelect(data, struct mgControl ctl, p_max, ...);
     // Print table
     wid = 68;
     print chrs(61*ones(wid, 1));
-    sprintf("  Lag Selection  --  %s  (auto p = %d)", estimator_type, p_auto);
+    sprintf("  Lag Selection  --  %s  (auto p = %d)", estimator, p_auto);
     print "  cr_lags = 0: no CSA lags    * = min-AIC    + = min-BIC";
     print chrs(61*ones(wid, 1));
     sprintf("  %-8s %15s %15s %15s", "cr_lags", "log-lik", "AIC", "BIC");

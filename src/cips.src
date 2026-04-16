@@ -38,24 +38,20 @@
 **           { cips, cadf } = cips(data, p, demean, 0);   // suppress output
 */
 #include cce.sdf 
-proc (2) = cips(data, ...);
+proc (2) = cips(data, formula="", p=0, demean=1, report=1);
 
-    local p, demean, report;
     local groupvar, timevar, yname, idvec, datevec, tvec, n, T, varnames;
     local cumtivec, i, y_full, ybar_full, dybar_full;
     local cips_stat, cadf_vec;
     local r1, r2, y_i, T_i, t_start, t_end, t_s_idx, agg_tmp;
     local ybar_i, dybar_i, dy_i, lhs, rhs, T_eff, j;
     local xx_inv, b, e, sig2, se_b, k_cadf, beta_col, p_trim;
-    local _yvar, _xvars;
 
-    // Formula string support: cips(data, "y" [, p, demean, report])
-    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
-        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+    // Formula string support: cips(data, formula="log_rgdpo")
+    if strlen(formula) > 0;
+        local _yvar, _xvars;
+        { _yvar, _xvars } = __parse_formula(formula);
         data = __selectVars(data, _yvar, "");
-        { p, demean, report } = dynargsGet(2|4, 0, 1, 1);
-    else;
-        { p, demean, report } = dynargsGet(1|3, 0, 1, 1);
     endif;
 
     varnames = getcolnames(data);
@@ -251,22 +247,11 @@ endp;
 **    cO = cips_test(data[., "id" "year" "log_rgdpo"]);
 **    cO = cips_test(data[., "id" "year" "log_rgdpo"], 1, 1, 0);  // suppress
 */
-proc (struct cipsOut) = cips_test(data, ...);
-    local p, demean, report, _formula;
+proc (struct cipsOut) = cips_test(data, formula="", p=0, demean=1, report=1);
     struct cipsOut cO;
 
-    // Formula string support: cips_test(data, "y" [, p, demean, report])
-    // Forward the formula to cips() by pre-selecting the column here
-    if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
-        _formula = dynargsGet(1);
-        { p, demean, report } = dynargsGet(2|4, 0, 1, 1);
-        // Pass report=0 to cips() to avoid double-printing
-        { cO.cips_stat, cO.cadf_vec } = cips(data, _formula, p, demean, 0);
-    else;
-        { p, demean, report } = dynargsGet(1|3, 0, 1, 1);
-        // Pass report=0 to cips() to avoid double-printing
-        { cO.cips_stat, cO.cadf_vec } = cips(data, p, demean, 0);
-    endif;
+    // Pass report=0 to cips() to avoid double-printing; cips_test prints once below
+    { cO.cips_stat, cO.cadf_vec } = cips(data, formula=formula, p=p, demean=demean, report=0);
 
     // Recover actual lag order used (cips() applies automatic selection when p=0)
     if p == 0;

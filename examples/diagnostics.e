@@ -69,18 +69,18 @@ print "=================================================================";
 print "STEP 2: CIPS Panel Unit Root Tests (Pesaran 2007)";
 print "=================================================================";
 
-// Test each series — cips() prints results automatically (report=1 by default)
+// Test each series using formula string — cips() prints automatically (report=1 by default)
 print "--- log_rgdpo (Real GDP, log) ---";
-{ cips_stat, cadf_vec } = cips(data[., "id" "year" "log_rgdpo"], 1);
+{ cips_stat, cadf_vec } = cips(data, formula="log_rgdpo", p=1);
 
 print "--- log_ck (Capital share, log) ---";
-{ cips_stat, cadf_vec } = cips(data[., "id" "year" "log_ck"], 1);
+{ cips_stat, cadf_vec } = cips(data, formula="log_ck", p=1);
 
 print "--- log_ngd (Pop. growth + break-even, log) ---";
-{ cips_stat, cadf_vec } = cips(data[., "id" "year" "log_ngd"], 1);
+{ cips_stat, cadf_vec } = cips(data, formula="log_ngd", p=1);
 
 print "--- log_hc (Human capital, log) ---";
-{ cips_stat, cadf_vec } = cips(data[., "id" "year" "log_hc"], 1);
+{ cips_stat, cadf_vec } = cips(data, formula="log_hc", p=1);
 
 print;
 print "If series are I(1): use ctl.i1=1 for the KPY (2011) extension,";

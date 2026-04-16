@@ -20,11 +20,11 @@
 **  Standard errors: the NP SE from the full-sample estimate is used as a conservative
 **  approximation. For HPJ-specific SE, use mgBootstrap() after obtaining HPJ estimates.
 **
-**  Format:  hpjO = hpj(data, mgCtl [, estimator_type])
+**  Format:  hpjO = hpj(data, mgCtl [, estimator])
 **
 **  Input:   data            Panel dataframe (same format as mg/cce_mg/dcce_mg).
 **           mgCtl           mgControl struct. Same ctl used for the original model.
-**           estimator_type  Optional string: "mg", "cce_mg" (default), or "dcce_mg".
+**           estimator  Optional string: "mg", "cce_mg" (default), or "dcce_mg".
 **
 **  Output:  hpjO            mgOut struct with HPJ-corrected b_mg.
 **                           .b_mg   = HPJ bias-corrected MG estimate
@@ -45,13 +45,12 @@
 **    hpjO = hpj(data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"], ctl, "dcce_mg");
 **    print hpjO.b_mg;   // HPJ bias-corrected estimates
 */
-proc (struct mgOut) = hpj(data, struct mgControl ctl, ...);
+proc (struct mgOut) = hpj(data, struct mgControl ctl, estimator="cce_mg");
 
-    local estimator_type, idx_h1, idx_h2, data_h1, data_h2;
+    local idx_h1, idx_h2, data_h1, data_h2;
     local k, b_full, b_h1, b_h2, b_hpj, results_hpj, namevar;
     struct mgControl ctl_s, ctl_h1, ctl_h2;
     struct mgOut mgO_full, mgO_h1, mgO_h2, hpjO;
-    estimator_type = dynargsGet(1, "cce_mg");
 
     // Suppress printing during half-panel runs
     ctl_s        = ctl;
@@ -73,9 +72,9 @@ proc (struct mgOut) = hpj(data, struct mgControl ctl, ...);
     endif;
 
     // Estimate on full panel and both halves
-    mgO_full = __mg_call(data,    ctl_s,  estimator_type);
-    mgO_h1   = __mg_call(data_h1, ctl_h1, estimator_type);
-    mgO_h2   = __mg_call(data_h2, ctl_h2, estimator_type);
+    mgO_full = __mg_call(data,    ctl_s,  estimator);
+    mgO_h1   = __mg_call(data_h1, ctl_h1, estimator);
+    mgO_h2   = __mg_call(data_h2, ctl_h2, estimator);
 
     // HPJ formula  --  applied to MG variables only (first numvars columns of b_mg)
     k      = mgO_full.numvars;
@@ -159,22 +158,22 @@ endp;
 /*
 ** __mg_call   --   Dispatch helper: calls mg, cce_mg, or dcce_mg by name.
 **
-** Validates estimator_type before dispatching. Valid values (case-sensitive):
+** Validates estimator before dispatching. Valid values (case-sensitive):
 **   "mg"       Plain Mean Group estimator (no CSA correction)
 **   "cce_mg"   CCE Mean Group (default)
 **   "dcce_mg"  Dynamic CCE Mean Group (adds lagged y and CSA lags)
 */
-proc (struct mgOut) = __mg_call(data, struct mgControl ctl, estimator_type);
+proc (struct mgOut) = __mg_call(data, struct mgControl ctl, estimator);
     struct mgOut mgO;
-    if not (estimator_type $== "mg" or estimator_type $== "cce_mg" or estimator_type $== "dcce_mg");
-        errorlogat "estimator_type '" $+ estimator_type $+ "' is not valid." $+
+    if not (estimator $== "mg" or estimator $== "cce_mg" or estimator $== "dcce_mg");
+        errorlogat "estimator '" $+ estimator $+ "' is not valid." $+
                    " Must be one of: 'mg', 'cce_mg', 'dcce_mg'.";
         end;
     endif;
 
-    if estimator_type $== "mg";
+    if estimator $== "mg";
         mgO = mg(data, ctl);
-    elseif estimator_type $== "dcce_mg";
+    elseif estimator $== "dcce_mg";
         mgO = dcce_mg(data, ctl);
     else;
         mgO = cce_mg(data, ctl);

@@ -1,0 +1,26 @@
+/*
+** dccelib.src -- Single-file loader for dccelib
+**
+** Usage in example files and user scripts:
+**
+**   #include c:/gauss26/pkgs/dccelib/src/dccelib.src;
+**
+** This loads the full library in one compilation pass, enabling named
+** keyword argument syntax at call sites:
+**
+**   { cips_stat, cadf } = cips(data, formula="log_rgdpo", p=1);
+**   hpjO = hpj(data, ctl, estimator="dcce_mg");
+**   wO   = westerlundTest(data, demean=2, report=0);
+**
+** Alternatively, use  library dccelib;  for positional-argument style.
+*/
+#include cce.sdf;
+#include dcceutil.src;
+#include cce_mg.src;
+#include slopehomo.src;
+#include cips.src;
+#include latex_export.src;
+#include bootstrap.src;
+#include bias_correct.src;
+#include diagnostics.src;
+#include westerlund.src;

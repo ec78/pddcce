@@ -20,6 +20,7 @@
 */
 proc (0) = plotResiduals(struct mgOut mgO);
     local e, n, e_std, e_sorted, p, q_norm, idx, ref_x, ref_y;
+    struct plotControl plt;
 
     e   = mgO.e_mg;
     n   = rows(e);
@@ -271,6 +272,7 @@ endp;
 proc (0) = plotCoefficients(struct mgOut mgO);
     local k0, nv, i, b_col, se_col, idx_sort, b_sorted, se_sorted;
     local ci_lo, ci_hi, grp_idx, ref_x, ref_y, nr, nc;
+    struct plotControl plt;
 
     k0 = mgO.numvars;    // MG regressors (excludes CSA augmentation terms)
     nv = minc(k0|6);     // plot at most 6 panels
@@ -365,9 +367,7 @@ endp;
 **    lrO  = longRunMG(cceO);        // prints by default
 **    lrO  = longRunMG(cceO, 0);     // suppress output
 */
-proc (struct longRunOut) = longRunMG(struct mgOut mgO, ...);
-    local report;
-    report = dynargsGet(1, 1);
+proc (struct longRunOut) = longRunMG(struct mgOut mgO, report=1);
 
     local p, k, k_x, phi, beta, sum_phi, rho, lr_coef, lr_se, lr_tval, lr_pval;
     local grad, j;
@@ -481,6 +481,7 @@ endp;
 */
 proc (0) = plotResidualACF(struct mgOut mgO, ...);
     local maxlag, e, n, acf, k, ee, denom, conf_band, lag_idx;
+    struct plotControl plt;
 
     maxlag = dynargsGet(1, 20);
 
