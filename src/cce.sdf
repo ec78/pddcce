@@ -12,9 +12,15 @@ matrix i1;          // 1 = add first-differenced CSA (KPY 2011, for I(1) regress
 matrix two_way;     // 1 = time-demean data before CCE (two-way CCE with time FE). Default 0.
 string y_var;           // Name of dependent variable column. Default "" (use column 3).
 string array x_vars;    // Names of regressor columns. Default "" (use columns 4+).
+string formula;         // Wilkinson formula string "y ~ x1 + x2". Alternative to y_var + x_vars.
 string array no_xbar_names; // Variable names to exclude from CSA. Alternative to no_xbar
                             // (which takes numeric column indices). Example:
                             // ctl.no_xbar_names = "log_ck" $| "log_hc";
+string array x_csa_names;   // Column names of extra CSA variables (alternative to passing
+                            // the x_csa matrix directly). Example:
+                            // ctl.x_csa_names = "log_hc" $| "log_hc2";
+string groupvar;        // Panel ID column name. Default "" (use column 1).
+string timevar;         // Time column name. Default "" (use column 2).
 };
 
 struct pcceNWOut {

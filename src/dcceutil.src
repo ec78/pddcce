@@ -9,7 +9,7 @@
 proc (0) = __print_mg_output(struct mgOut mgO);
     local wid, fmt_si, fmt_sf, fmt_ii, fmt_ss, fmt_h, fmt_r, k, i;
 
-    wid = 78;
+    wid = 80;
     fmt_si = "  %-28s %-12s   %-24s %-12d";
     fmt_ii = "  %-28s %-12d   %-24s %-12d";
     fmt_sf = "  %-28s %-12.4f   %-24s %-12.4f";
@@ -73,7 +73,11 @@ proc (struct mgControl) = mgControlCreate();
     ctl.two_way  = 0;
     ctl.y_var         = "";
     ctl.x_vars        = "";
+    ctl.formula       = "";
     ctl.no_xbar_names = "";
+    ctl.x_csa_names   = "";
+    ctl.groupvar      = "";
+    ctl.timevar       = "";
     retp(ctl);
 endp;
 
@@ -161,16 +165,38 @@ endp;
 */
 proc (1) = __selectVars(data, y_var, x_vars);
     local colnames, groupvar, timevar, sel_cols, xcols, i, ncols;
+    local col_types;
 
     // No-op if y_var not specified
     if y_var $== "";
         retp(data);
     endif;
 
-    colnames = getcolnames(data);
+    colnames  = getcolnames(data);
+    col_types = getcoltypes(data);
+    ncols     = rows(colnames);
+
+    // Detect group variable: first category or string column (fallback: col 1)
     groupvar = colnames[1];
-    timevar  = colnames[2];
-    ncols    = rows(colnames);
+    i = 1;
+    do while i <= ncols;
+        if col_types[i] == META_TYPE_CATEGORY or col_types[i] == META_TYPE_STRING;
+            groupvar = colnames[i];
+            i = ncols + 1;
+        endif;
+        i = i + 1;
+    endo;
+
+    // Detect time variable: first date column (fallback: col 2)
+    timevar = colnames[2];
+    i = 1;
+    do while i <= ncols;
+        if col_types[i] == META_TYPE_DATE;
+            timevar = colnames[i];
+            i = ncols + 1;
+        endif;
+        i = i + 1;
+    endo;
 
     if rows(x_vars) == 1 and x_vars $== "";
         // x_vars not specified: collect all columns that are not group, time, or y
@@ -196,6 +222,44 @@ proc (1) = __selectVars(data, y_var, x_vars);
     endif;
 
     retp(data[., sel_cols]);
+endp;
+
+
+/*
+** __reorderPanel
+**
+** Moves the specified group and time columns to positions 1 and 2 in the
+** dataframe so that downstream procs can rely on the standard column order.
+** All other columns follow in their original order.
+**
+** Called automatically by the estimators when ctl.groupvar / ctl.timevar
+** are non-empty.
+*/
+proc (1) = __reorderPanel(data, grpvar, timvar);
+    local colnames, other_cols, i, col;
+
+    if not hasmetadata(data);
+        retp(data);   // plain matrix — column order unchanged
+    endif;
+
+    colnames   = getcolnames(data);
+    other_cols = "";
+    for i(1, rows(colnames), 1);
+        col = colnames[i];
+        if not (col $== grpvar or col $== timvar);
+            if other_cols $== "";
+                other_cols = col;
+            else;
+                other_cols = other_cols $| col;
+            endif;
+        endif;
+    endfor;
+
+    if other_cols $== "";
+        retp(data[., grpvar $| timvar]);
+    else;
+        retp(data[., grpvar $| timvar $| other_cols]);
+    endif;
 endp;
 
 
@@ -416,12 +480,21 @@ proc(2) = __getHMat(data_d, ybar, xbar, starttvec, endtvec, datevec, bigT, ...);
 endp;
 
 
-proc (5) = __getnames(data, x_common, x_csa, ylag);
+// Optional 5th and 6th args: hint_groupvar, hint_timevar (strings). When non-empty,
+// passed to __find_time_id_var instead of assuming columns 1/2 are group/time.
+proc (5) = __getnames(data, x_common, x_csa, ylag, ...);
 
     local varnames, groupvar, timevar, yname, xnames, dname, tmp;
+    local hint_gvar, hint_tvar;
+    { hint_gvar, hint_tvar } = dynargsGet(1|2, "", "");
+
     if hasmetadata(data);
         varnames = getcolnames(data);
-        { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+        if hint_gvar $!= "" and hint_tvar $!= "";
+            { groupvar, timevar, varnames } = __find_time_id_var(data, hint_gvar, hint_tvar);
+        else;
+            { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+        endif;
         yname  = varnames[3];
         xnames = varnames[4:cols(data)];
     else;
@@ -498,16 +571,12 @@ endp;
 
 
 proc (1) = __delXBars(xbar, no_xbar);
-
-    if type(no_xbar) == 6 and no_xbar /= 0;
-        no_xbar = no_xbar - 3;
-    endif;
-
-    if not no_xbar;
+    // no_xbar == 0 (scalar) means include all; otherwise, convert data column index
+    // to xbar column index (xbar starts at col 4 of data) and delete those columns.
+    if rows(no_xbar) == 1 and cols(no_xbar) == 1 and no_xbar == 0;
         retp(xbar);
-    else;
-        retp(delcols(xbar, no_xbar));
     endif;
+    retp(delcols(xbar, no_xbar - 3));
 endp;
 
 

@@ -1,20 +1,76 @@
+/*
+** cce_penn.e
+**
+** CCE Mean Group estimator on Penn World Tables data.
+** Demonstrates three equivalent ways to specify variables:
+**
+**   1. Pre-select columns (traditional column-order approach)
+**   2. ctl.y_var / ctl.x_vars  (select by column name via mgControl)
+**   3. ctl.formula             (Wilkinson formula string via mgControl)
+**
+** In all three cases the estimator is identical.
+**
+** Data: Penn World Tables (N=93 countries, T~50 years)
+** Model: log_rgdpo ~ log_ck + log_ngd, extra CSA: log_hc
+*/
+
 new;
 library dccelib;
 
-/*
-** The dataset contains the following:
-**    log_rgdpo           Real GDP
-**    log_hc              Human Capital
-**    log_ck              Physical Capital
-**    log_ngd             Population growth + break even investments of 5%
-*/
-
-// First load data
 fname = __FILE_DIR $+ "penn_world.dta";
-data = packr(loadd(fname, ". + date($year, '%Y')"));
+data  = packr(loadd(fname, ". + date($year, '%Y')"));
 
-// Set up reg data
+// -----------------------------------------------------------------------
+// Approach 1: Pre-select columns (traditional)
+// -----------------------------------------------------------------------
+print "=================================================================";
+print "Approach 1: Column pre-selection (traditional)";
+print "=================================================================";
+
 reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
 
-// Call regression
-cceO = cce_mg(packr(reg_data));
+ctl1 = mgControlCreate();
+ctl1.x_csa = data[., "log_hc"];    // extra CSA variable as matrix (traditional)
+
+cceO1 = cce_mg(packr(reg_data), ctl1);
+
+// -----------------------------------------------------------------------
+// Approach 2: ctl.y_var / ctl.x_vars (select by column name)
+// -----------------------------------------------------------------------
+print "=================================================================";
+print "Approach 2: ctl.y_var / ctl.x_vars (select by column name)";
+print "=================================================================";
+
+ctl2 = mgControlCreate();
+ctl2.y_var       = "log_rgdpo";
+ctl2.x_vars      = "log_ck" $| "log_ngd";
+ctl2.x_csa_names = "log_hc";   // extra CSA variable by name (new)
+
+cceO2 = cce_mg(packr(data), ctl2);
+
+// -----------------------------------------------------------------------
+// Approach 3: ctl.formula (Wilkinson formula string)
+// -----------------------------------------------------------------------
+print "=================================================================";
+print "Approach 3: ctl.formula (formula string)";
+print "=================================================================";
+
+ctl3 = mgControlCreate();
+ctl3.formula     = "log_rgdpo ~ log_ck + log_ngd";
+ctl3.x_csa_names = "log_hc";
+
+cceO3 = cce_mg(packr(data), ctl3);
+
+// -----------------------------------------------------------------------
+// Confirm all three give the same coefficients
+// -----------------------------------------------------------------------
+print "=================================================================";
+print "Coefficient check (all three should match)";
+print "=================================================================";
+print "            Approach 1    Approach 2    Approach 3";
+for i(1, 2, 1);
+    print cceO1.mg_vars[i] $+
+          "     " $+ ntos(cceO1.b_mg[i], 6) $+
+          "   "   $+ ntos(cceO2.b_mg[i], 6) $+
+          "   "   $+ ntos(cceO3.b_mg[i], 6);
+endfor;

@@ -25,7 +25,8 @@
         "bootstrap.src",
         "bias_correct.src",
         "diagnostics.src",
-        "westerlund.src"
+        "westerlund.src",
+        "pca_cce.src"
     ],
     "version": "1.2.0"
 }

@@ -38,7 +38,7 @@
 **           { cips, cadf } = cips(data, p, demean, 0);   // suppress output
 */
 #include cce.sdf 
-proc (2) = cips(data, formula="", p=0, demean=1, report=1);
+proc (2) = cips(data, formula="", p=0, demean=1, report=1, id_var="", time_var="");
 
     local groupvar, timevar, yname, idvec, datevec, tvec, n, T, varnames;
     local cumtivec, i, y_full, ybar_full, dybar_full;
@@ -55,7 +55,11 @@ proc (2) = cips(data, formula="", p=0, demean=1, report=1);
     endif;
 
     varnames = getcolnames(data);
-    { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+    if id_var $!= "" and time_var $!= "";
+        { groupvar, timevar, varnames } = __find_time_id_var(data, id_var, time_var);
+    else;
+        { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+    endif;
     yname = varnames[3];
 
     idvec   = unique(data[., groupvar]);
@@ -247,11 +251,11 @@ endp;
 **    cO = cips_test(data[., "id" "year" "log_rgdpo"]);
 **    cO = cips_test(data[., "id" "year" "log_rgdpo"], 1, 1, 0);  // suppress
 */
-proc (struct cipsOut) = cips_test(data, formula="", p=0, demean=1, report=1);
+proc (struct cipsOut) = cips_test(data, formula="", p=0, demean=1, report=1, id_var="", time_var="");
     struct cipsOut cO;
 
     // Pass report=0 to cips() to avoid double-printing; cips_test prints once below
-    { cO.cips_stat, cO.cadf_vec } = cips(data, formula=formula, p=p, demean=demean, report=0);
+    { cO.cips_stat, cO.cadf_vec } = cips(data, formula, p, demean, 0, id_var, time_var);
 
     // Recover actual lag order used (cips() applies automatic selection when p=0)
     if p == 0;

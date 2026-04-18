@@ -68,46 +68,52 @@ proc (struct mgOut) = pcce_mg(data, ...);
 
     local num_pc, m_auto;
     local ctl_dflt, varnames;
-    local data_bar, csa_raw, T, n_csa, sv, er_ratios, h_pc, pc_scores;
+    local data_bar, csa_raw, T, n_csa, sv, h_pc, pc_scores;
     local pc_colnames, j, pc_name;
     local data_aug, csa_lags_orig, pcceO;
+    local u_pca, s_pca, v_pca;
+    local _yvar_f, _xvars_f, _yvar_c, _xvars_c;
+    local groupvar, timevar, _vnames;
+    local n, idvec, tvec, cumtivec, i, r1, r2, T_i;
+    local pc_stacked, t_start_i, t_end_i, pc_i, agg_tmp, datevec;
+    local k_x, report_flag;
 
     struct mgControl ctl;
     struct mgControl ctl_dflt_s;
     struct mgOut pcceO_s;
-
-    // --- Check that GML (pcaFit) is available ---
-    if not procnameid("pcaFit");
-        errorlogat "pcce_mg: The GAUSS Machine Learning (GML) library is required." $+
-                   " Install it via the GAUSS Package Manager and add" $+
-                   " 'library gml;' before calling pcce_mg().";
-        end;
-    endif;
+    struct mgControl ctl_pc_s;
 
     // --- Optional arguments ---
     ctl_dflt_s = mgControlCreate();
 
     // Formula string support: pcce_mg(data, "y ~ x1 + x2" [, ctl, num_pc])
-    local _yvar_f, _xvars_f;
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
-        { _yvar_f, _xvars_f } = __parse_formula(dynargsGet(1));
-        data   = __selectVars(data, _yvar_f, _xvars_f);
         { ctl, num_pc } = dynargsGet(2|3, ctl_dflt_s, 0);
+        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+            ctl.x_csa = data[., ctl.x_csa_names];
+        endif;
+        { _yvar_f, _xvars_f } = __parse_formula(dynargsGet(1));
+        data = __selectVars(data, _yvar_f, _xvars_f);
     else;
         { ctl, num_pc } = dynargsGet(1|2, ctl_dflt_s, 0);
-    endif;
-
-    // --- Variable selection by name via control struct (overrides formula if both given) ---
-    if ctl.y_var $!= "";
-        data = __selectVars(data, ctl.y_var, ctl.x_vars);
+        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+            ctl.x_csa = data[., ctl.x_csa_names];
+        endif;
+        if ctl.formula $!= "" and ctl.y_var $== "";
+            { _yvar_c, _xvars_c } = __parse_formula(ctl.formula);
+            data = __selectVars(data, _yvar_c, _xvars_c);
+        elseif ctl.y_var $!= "";
+            data = __selectVars(data, ctl.y_var, ctl.x_vars);
+        endif;
     endif;
 
     // --- Compute cross-sectional average matrix ---
-    // data_bar is a T x (k+3) dataframe: [group_id, time, ybar, xbar1, ..., xbark]
-    // We also include ctl.x_csa variables if provided.
-    local groupvar, timevar, _vnames;
     varnames = getcolnames(data);
-    { groupvar, timevar, _vnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+    if ctl.groupvar $!= "" and ctl.timevar $!= "";
+        { groupvar, timevar, _vnames } = __find_time_id_var(data, ctl.groupvar, ctl.timevar);
+    else;
+        { groupvar, timevar, _vnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+    endif;
 
     data_bar = getCSA(data, groupvar, timevar, ctl.x_csa);
 
@@ -119,26 +125,23 @@ proc (struct mgOut) = pcce_mg(data, ...);
     // --- Center the CSA matrix (required before PCA) ---
     csa_raw = csa_raw - ones(T, 1) * meanc(csa_raw)';
 
+    // --- Full SVD of centered CSA matrix (used for both ER criterion and scores) ---
+    { u_pca, s_pca, v_pca } = svdcusv(csa_raw);
+    sv = diag(s_pca);
+
     // --- Determine number of PCs to retain ---
     if num_pc == 0;
         // Automatic: eigenvalue ratio criterion (Ahn & Horenstein 2013)
         // ER(m) = lambda(m) / lambda(m+1) — choose m that maximises ER
-        sv      = svd(csa_raw);
-        sv      = sv[1:n_csa];       // singular values of csa_raw
-        m_auto  = __pc_er_criterion(sv .^ 2, n_csa);
-        num_pc  = m_auto;
+        m_auto = __pc_er_criterion(sv[1:n_csa] .^ 2, n_csa);
+        num_pc = m_auto;
     endif;
 
     // Clamp: at least 1, at most n_csa
     num_pc = maxc(1|minc(num_pc|n_csa));
 
-    // --- Run PCA via GML pcaFit ---
-    // pcaFit expects a T x p matrix; returns pcaOut struct with .scores (T x m)
-    struct pcaOut pO_s;
-    pO_s = pcaFit(csa_raw, num_pc);
-
-    // PC scores: T x num_pc matrix — these replace the raw CSAs as factor proxies
-    pc_scores = pO_s.scores;
+    // --- PC scores: T x num_pc --- no external library needed
+    pc_scores = csa_raw * v_pca[., 1:num_pc];
 
     // --- Build column names for the PC augmentation variables ---
     pc_colnames = "";
@@ -163,9 +166,6 @@ proc (struct mgOut) = pcce_mg(data, ...);
     // then pass as ctl.x_csa; set no_xbar for ALL original x columns so
     // only the PC-derived CSAs enter the augmentation.
 
-    local n, idvec, tvec, cumtivec, i, r1, r2, T_i;
-    local pc_stacked;
-
     idvec    = unique(data[., groupvar]);
     tvec     = counts(data[., groupvar], idvec);
     n        = rows(idvec);
@@ -173,33 +173,32 @@ proc (struct mgOut) = pcce_mg(data, ...);
 
     // Stack pc_scores for each group (each group gets the same T PC values,
     // aligned to their time span)
-    local t_start_i, t_end_i, pc_i, agg_tmp;
-    local datevec;
     datevec = unique(data[., timevar]);
 
     pc_stacked = zeros(rows(data), num_pc);
     for i(1, n, 1);
-        r1    = cumtivec[i] + 1;
-        r2    = cumtivec[i+1];
-        T_i   = tvec[i];
-        agg_tmp  = aggregate(data[r1:r2, groupvar$|timevar], "min", groupvar);
-        t_start_i = indnv(agg_tmp[., 2], datevec)[1];
+        r1        = cumtivec[i] + 1;
+        r2        = cumtivec[i+1];
+        T_i       = tvec[i];
+        // Find where this group's first time obs falls in datevec
+        t_start_i = sumc(datevec .< data[r1, timevar]) + 1;
         t_end_i   = t_start_i + T_i - 1;
         pc_stacked[r1:r2, .] = pc_scores[t_start_i:t_end_i, .];
     endfor;
 
     // Build a modified ctl: use pc_stacked as x_csa, exclude all original
     // y and x from CSA via no_xbar (columns 3 through k+2)
-    struct mgControl ctl_pc_s;
-    ctl_pc_s         = ctl;
-    ctl_pc_s.x_csa   = pc_stacked;
-    // Exclude columns 3..k+2 from CSA (keep only the pc_stacked CSAs)
-    local k_x;
-    k_x              = cols(data) - 2;   // number of y + x columns
-    ctl_pc_s.no_xbar = seqa(1, 1, k_x)'; // exclude y and all x from CSA
+    ctl_pc_s              = ctl;
+    ctl_pc_s.x_csa        = pc_stacked;
+    ctl_pc_s.x_csa_names  = "";       // already resolved — don't re-extract
+    ctl_pc_s.formula      = "";       // data already selected — don't reselect
+    ctl_pc_s.y_var        = "";       // same
+    // Exclude all x columns from the CSA (keep only the pc_stacked CSAs).
+    // no_xbar uses data column indices: x cols start at col 4.
+    k_x              = cols(data) - 3;       // number of x variables (y is col 3)
+    ctl_pc_s.no_xbar = seqa(4, 1, k_x)';   // row vector: data cols 4..4+k_x-1
 
     // Suppress internal printing during estimation; print once below
-    local report_flag;
     report_flag      = ctl.report;
     ctl_pc_s.report  = 0;
 

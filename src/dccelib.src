@@ -24,3 +24,4 @@
 #include bias_correct.src;
 #include diagnostics.src;
 #include westerlund.src;
+#include pca_cce.src;

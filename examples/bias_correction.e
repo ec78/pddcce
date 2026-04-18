@@ -61,6 +61,7 @@ dcceO = dcce_mg(reg_data, ctl);
 // Step 2: HPJ-corrected DCCE-MG
 print;
 print "--- HPJ bias-corrected DCCE-MG ---";
+struct mgOut hpjO;
 hpjO = hpj(reg_data, ctl, estimator="dcce_mg");
 
 // Compare full-sample vs. HPJ estimates
@@ -88,6 +89,7 @@ print "--- HPJ bias-corrected CCE-MG ---";
 cce_ctl = mgControlCreate();
 cce_ctl.x_csa = data[., "log_hc"];
 
+struct mgOut hpjO_cce;
 hpjO_cce = hpj(reg_data, cce_ctl);
 
 
@@ -116,7 +118,7 @@ print "=================================================================";
 B = 199;
 
 print "Running " $+ ntos(B, 1) $+ " bootstrap replications for DCCE-MG...";
-{ se_boot, b_boot } = mgBootstrap(reg_data, ctl, B=B, estimator="dcce_mg");
+{ se_boot, b_boot } = mgBootstrap(reg_data, ctl, B, "dcce_mg");
 
 print;
 print "Bootstrap SE vs. NP SE comparison:";
@@ -162,7 +164,7 @@ print "=================================================================";
 cce_ctl2 = mgControlCreate();
 cce_ctl2.x_csa = data[., "log_hc"];
 
-{ se_cce_boot, b_cce_boot } = mgBootstrap(reg_data, cce_ctl2, B=B);
+{ se_cce_boot, b_cce_boot } = mgBootstrap(reg_data, cce_ctl2, B, "cce_mg");
 
 print;
 print "CCE-MG NP SE vs. Bootstrap SE:";

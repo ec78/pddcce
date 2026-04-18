@@ -45,22 +45,39 @@ proc (struct mgOut) = dcce_mg(data, ...);
     struct mgControl ctl;
     mgCtl_dflt = mgControlCreate();
 
-    // Formula string support: dcce_mg(data, "y ~ x1 + x2" [, ctl])
+    // Positional formula: dcce_mg(data, "y ~ x1 + x2" [, ctl])
+    // Data must have group/time in columns 1/2 for this path (or use ctl.groupvar/timevar below)
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        ctl = dynargsGet(2, mgCtl_dflt);
+        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+            ctl.x_csa = data[., ctl.x_csa_names];
+        endif;
         { _yvar, _xvars } = __parse_formula(dynargsGet(1));
         data = __selectVars(data, _yvar, _xvars);
-        ctl  = dynargsGet(2, mgCtl_dflt);
     else;
-        ctl  = dynargsGet(1, mgCtl_dflt);
-    endif;
+        ctl = dynargsGet(1, mgCtl_dflt);
 
-    // Variable selection by name via control struct (overrides formula if both given)
-    if ctl.y_var $!= "";
-        data = __selectVars(data, ctl.y_var, ctl.x_vars);
+        // Reorder group/time to columns 1/2 if user specified them (enables using unsorted data)
+        if ctl.groupvar $!= "" and ctl.timevar $!= "";
+            data = __reorderPanel(data, ctl.groupvar, ctl.timevar);
+        endif;
+
+        // x_csa by column names — extract from full data BEFORE column selection narrows it
+        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+            ctl.x_csa = data[., ctl.x_csa_names];
+        endif;
+
+        // Formula via control struct
+        if ctl.formula $!= "" and ctl.y_var $== "";
+            { _yvar, _xvars } = __parse_formula(ctl.formula);
+            data = __selectVars(data, _yvar, _xvars);
+        elseif ctl.y_var $!= "";
+            data = __selectVars(data, ctl.y_var, ctl.x_vars);
+        endif;
     endif;
 
     // Get variable names
-    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
+    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags, ctl.groupvar, ctl.timevar);
 
     // Check if data is balanced
     isbalanced = __pdbalanced(data[., groupvar]);
@@ -215,21 +232,31 @@ proc (struct mgOut) = mg(data, ...);
     struct mgControl ctl;
     mgCtl_dflt = mgControlCreate();
 
-    // Formula string support: mg(data, "y ~ x1 + x2" [, ctl])
+    // Positional formula: mg(data, "y ~ x1 + x2" [, ctl])
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        ctl = dynargsGet(2, mgCtl_dflt);
+        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+            ctl.x_csa = data[., ctl.x_csa_names];
+        endif;
         { _yvar, _xvars } = __parse_formula(dynargsGet(1));
         data = __selectVars(data, _yvar, _xvars);
-        ctl  = dynargsGet(2, mgCtl_dflt);
     else;
-        ctl  = dynargsGet(1, mgCtl_dflt);
+        ctl = dynargsGet(1, mgCtl_dflt);
+        if ctl.groupvar $!= "" and ctl.timevar $!= "";
+            data = __reorderPanel(data, ctl.groupvar, ctl.timevar);
+        endif;
+        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+            ctl.x_csa = data[., ctl.x_csa_names];
+        endif;
+        if ctl.formula $!= "" and ctl.y_var $== "";
+            { _yvar, _xvars } = __parse_formula(ctl.formula);
+            data = __selectVars(data, _yvar, _xvars);
+        elseif ctl.y_var $!= "";
+            data = __selectVars(data, ctl.y_var, ctl.x_vars);
+        endif;
     endif;
 
-    // Variable selection by name via control struct (overrides formula if both given)
-    if ctl.y_var $!= "";
-        data = __selectVars(data, ctl.y_var, ctl.x_vars);
-    endif;
-
-    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
+    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags, ctl.groupvar, ctl.timevar);
 
     if sumc(sumc(ismiss(data)));
         errorlogat "'mg': Missing Data Somewhere! This code does not allow it.";
@@ -308,21 +335,31 @@ proc (struct mgOut) = cce_mg(data, ...);
     struct mgControl ctl;
     mgCtl_dflt = mgControlCreate();
 
-    // Formula string support: cce_mg(data, "y ~ x1 + x2" [, ctl])
+    // Positional formula: cce_mg(data, "y ~ x1 + x2" [, ctl])
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
+        ctl = dynargsGet(2, mgCtl_dflt);
+        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+            ctl.x_csa = data[., ctl.x_csa_names];
+        endif;
         { _yvar, _xvars } = __parse_formula(dynargsGet(1));
         data = __selectVars(data, _yvar, _xvars);
-        ctl  = dynargsGet(2, mgCtl_dflt);
     else;
-        ctl  = dynargsGet(1, mgCtl_dflt);
+        ctl = dynargsGet(1, mgCtl_dflt);
+        if ctl.groupvar $!= "" and ctl.timevar $!= "";
+            data = __reorderPanel(data, ctl.groupvar, ctl.timevar);
+        endif;
+        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+            ctl.x_csa = data[., ctl.x_csa_names];
+        endif;
+        if ctl.formula $!= "" and ctl.y_var $== "";
+            { _yvar, _xvars } = __parse_formula(ctl.formula);
+            data = __selectVars(data, _yvar, _xvars);
+        elseif ctl.y_var $!= "";
+            data = __selectVars(data, ctl.y_var, ctl.x_vars);
+        endif;
     endif;
 
-    // Variable selection by name via control struct (overrides formula if both given)
-    if ctl.y_var $!= "";
-        data = __selectVars(data, ctl.y_var, ctl.x_vars);
-    endif;
-
-    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags);
+    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags, ctl.groupvar, ctl.timevar);
 
     if sumc(sumc(ismiss(data)));
         errorlogat "'cce_mg': Missing Data Somewhere! This code does not allow it.";

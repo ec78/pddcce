@@ -47,7 +47,7 @@
 **    // With lags and trend, suppress output:
 **    wO = westerlundTest(data, 2, 2, 0);
 */
-proc (struct westerlundOut) = westerlundTest(data, formula="", p=0, demean=1, report=1);
+proc (struct westerlundOut) = westerlundTest(data, formula="", p=0, demean=1, report=1, id_var="", time_var="");
     local varnames, groupvar, timevar;
     local idvec, tvec, n, cumtivec, T_bar;
     local p_act, k;
@@ -68,7 +68,11 @@ proc (struct westerlundOut) = westerlundTest(data, formula="", p=0, demean=1, re
     endif;
 
     varnames = getcolnames(data);
-    { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+    if id_var $!= "" and time_var $!= "";
+        { groupvar, timevar, varnames } = __find_time_id_var(data, id_var, time_var);
+    else;
+        { groupvar, timevar, varnames } = __find_time_id_var(data, varnames[1], varnames[2]);
+    endif;
 
     idvec    = unique(data[., groupvar]);
     tvec     = counts(data[., groupvar], idvec);

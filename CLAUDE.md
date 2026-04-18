@@ -32,7 +32,8 @@ pddcce/
 │   ├── bootstrap.src       # Wild bootstrap standard errors for MG estimators
 │   ├── bias_correct.src    # Half-panel jackknife (HPJ) bias correction
 │   ├── diagnostics.src     # plotResiduals(), cce_rank(), print_cce_rank(), plotCoefficients(), longRunMG(), plotResidualACF()
-│   └── westerlund.src      # Westerlund (2007) panel cointegration test
+│   ├── westerlund.src      # Westerlund (2007) panel cointegration test
+│   └── pca_cce.src         # PC-CCE-MG estimator (PCA of CSAs, no GML dependency)
 ├── docs/
 │   ├── api_reference.md    # Full public API reference
 │   ├── blog_outline.md     # Medium blog post outline
@@ -46,6 +47,7 @@ pddcce/
 │   ├── advanced_cce.e      # pooled CCE, I(1), two-way CCE options
 │   ├── bias_correction.e   # HPJ bias correction + wild bootstrap SE
 │   ├── export_tables.e     # LaTeX single and multi-model export
+│   ├── pca_cce.e           # PC-CCE-MG example
 │   ├── penn_sample.dta     # Penn World Tables sample data (Stata format)
 │   └── jasa2.dta           # Additional dataset
 └── validation/
@@ -97,6 +99,10 @@ Key GAUSS conventions used in this codebase:
 | `two_way` | 0 | 1 = time-demean data before CCE (two-way CCE with time FE) |
 | `y_var` | `""` | Name of dependent variable column. If set, columns are automatically reordered. |
 | `x_vars` | `""` | Name(s) of regressor columns (`"x1" $\| "x2"`). Used with `y_var`. |
+| `formula` | `""` | Wilkinson formula string `"y ~ x1 + x2"`. Overrides `y_var`/`x_vars`. |
+| `x_csa_names` | `""` | Column name(s) of extra CSA variables. Resolved before column selection. |
+| `groupvar` | `""` | Panel ID column name. When set, columns are reordered to standard order. |
+| `timevar` | `""` | Time column name. Used with `groupvar`. |
 
 ### `mgOut` — Results output structure
 | Member | Description |
@@ -244,6 +250,13 @@ All previously identified bugs are fixed. Summary:
 | `cce.sdf` `longRunOut` | `scalar adj_speed` — type mismatch in GAUSS 26 | Changed to `matrix` |
 | `dcce_penn.e` | Missing `packr()` on data load → missing data error | Added `packr()` and `order()` |
 | `bias_correction.e` | `hpjO.b_stats` used instead of `hpjO.b_stats_hpj` | Fixed field name |
+| `dcceutil.src` `__selectVars` | Hardcoded `colnames[2]` as timevar; fails when year is not col 2 | Auto-detect via `META_TYPE_DATE` column type scan |
+| `dcceutil.src` `__delXBars` | `if not no_xbar` fails for vector `no_xbar`; `no_xbar /= 0` also fails | Replaced with explicit scalar-zero check; removed type check |
+| `pca_cce.src` | Used GML `pcaFit`/`pcaOut` (external dependency, wrong struct name, prints output) | Replaced with direct SVD (`svdcusv` + `v * csa_raw`) |
+| `pca_cce.src` | `local` declarations after executable code → variables not properly declared | Moved all `local`/`struct` declarations to top of proc |
+| `pca_cce.src` | `no_xbar = seqa(1,1,k_x)` used wrong indexing convention (1-based from scratch) | Fixed to `seqa(4,1,k_x-1)'` (data column indices, row vector) |
+| `pca_cce.src` `pcce_mg` | `ctl_pc_s.x_csa_names`/`.formula` not cleared → re-extracted in nested `cce_mg` | Set both to `""` after data already selected |
+| `package.json` | `pca_cce.src` missing from `src` list → `library dccelib` couldn't load `pcce_mg` | Added `pca_cce.src` to `src` array |
 
 ---
 
