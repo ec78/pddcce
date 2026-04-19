@@ -108,6 +108,7 @@ plotCoefficients(cceO);
 // Significant autocorrelation at short lags suggests serial persistence
 // in growth rates that the static model has not absorbed motivating
 // the dynamic CCE-MG specification in the next step.
+plotClearLayout();
 plotResidualACF(cceO);
 
 // -----------------------------------------------------------------------
