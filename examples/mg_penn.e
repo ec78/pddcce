@@ -18,36 +18,24 @@ library dccelib;
 fname = __FILE_DIR $+ "penn_world.dta";
 data  = packr(loadd(fname, ". + date($year, '%Y')"));
 
-// -----------------------------------------------------------------------
-// Approach 1: Pre-select columns in standard [group, time, y, x] order
-// -----------------------------------------------------------------------
-print "=================================================================";
-print "Approach 1: Column pre-selection (traditional)";
-print "=================================================================";
-
+/* -----------------------------------------------------------------------
+   Approach 1: Pre-select columns in standard [group, time, y, x] order
+   ----------------------------------------------------------------------- */
 reg_data = data[., "id" "year" "log_rgdpo" "log_ck" "log_ngd"];
 mgO = mg(reg_data);
 
-// -----------------------------------------------------------------------
-// Approach 2: Formula string as second argument
-// Uses pre-selected data so group/time are in columns 1/2
-// -----------------------------------------------------------------------
-print "=================================================================";
-print "Approach 2: Formula string as second argument";
-print "=================================================================";
+/* -----------------------------------------------------------------------
+   Approach 3: Formula string as second argument
+   -----------------------------------------------------------------------*/
+mgO2 = mg(data, "log_rgdpo ~ log_ck + log_ngd");
 
-mgO2 = mg(reg_data, "log_rgdpo ~ log_ck + log_ngd");
-
-// -----------------------------------------------------------------------
-// Approach 3: ctl.formula with explicit groupvar/timevar
-// Works on the full unsorted data (year is column 6 in penn_world.dta)
-// -----------------------------------------------------------------------
-print "=================================================================";
-print "Approach 3: ctl.formula + ctl.groupvar/timevar";
-print "=================================================================";
-
+/* -----------------------------------------------------------------------
+   Approach 2: ctl.formula with explicit groupvar/timevar
+   Works on the full unsorted data (year is column 6 in penn_world.dta)
+   -----------------------------------------------------------------------*/
 ctl = mgControlCreate();
-ctl.formula  = "log_rgdpo ~ log_ck + log_ngd";
+ctl.y_var = "log_rgdpo";
+ctl.x_vars = "log_ck" $| "log_ngd";
 ctl.groupvar = "id";
 ctl.timevar  = "year";
 
