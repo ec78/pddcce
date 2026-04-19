@@ -39,27 +39,45 @@ proc (struct mgOut) = dcce_mg(data, ...);
           groupvar, timevar, zero_xx, zero_idx, ybarlags, xbarlags, PT, datevec,
           isbalanced, y_l, csa_vars, cd_nt, pvalue_cd_nt, meanrho, used;
     local e, dh_i1, dhname_i1, cumtivec, start_i, start_j, end_j, varname_cce_p;
-    local _yvar, _xvars;
+    local _yvar, _xvars, _formula_raw, _csa_from_formula;
 
     struct mgControl mgCtl_dflt;
     struct mgControl ctl;
     mgCtl_dflt = mgControlCreate();
 
-    // Positional formula: dcce_mg(data, "y ~ x1 + x2" [, ctl])
-    // Data must have group/time in columns 1/2 for this path (or use ctl.groupvar/timevar below)
+    // Positional formula: dcce_mg(data, "y ~ x1 + x2 + csa(z)" [, ctl])
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
         ctl = dynargsGet(2, mgCtl_dflt);
+        { _formula_raw, _csa_from_formula } = __parse_csa(dynargsGet(1));
+        if not (rows(_csa_from_formula) == 1 and _csa_from_formula $== "");
+            if rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "";
+                ctl.x_csa_names = _csa_from_formula;
+            else;
+                ctl.x_csa_names = _csa_from_formula $| ctl.x_csa_names;
+            endif;
+        endif;
         if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
             ctl.x_csa = data[., ctl.x_csa_names];
         endif;
-        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+        { _yvar, _xvars } = __parse_formula(_formula_raw);
         data = __selectVars(data, _yvar, _xvars);
     else;
         ctl = dynargsGet(1, mgCtl_dflt);
 
-        // Reorder group/time to columns 1/2 if user specified them (enables using unsorted data)
         if ctl.groupvar $!= "" and ctl.timevar $!= "";
             data = __reorderPanel(data, ctl.groupvar, ctl.timevar);
+        endif;
+
+        // Extract csa() vars from formula BEFORE x_csa extraction (may add new names)
+        if ctl.formula $!= "" and ctl.y_var $== "";
+            { _formula_raw, _csa_from_formula } = __parse_csa(ctl.formula);
+            if not (rows(_csa_from_formula) == 1 and _csa_from_formula $== "");
+                if rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "";
+                    ctl.x_csa_names = _csa_from_formula;
+                else;
+                    ctl.x_csa_names = _csa_from_formula $| ctl.x_csa_names;
+                endif;
+            endif;
         endif;
 
         // x_csa by column names — extract from full data BEFORE column selection narrows it
@@ -67,9 +85,8 @@ proc (struct mgOut) = dcce_mg(data, ...);
             ctl.x_csa = data[., ctl.x_csa_names];
         endif;
 
-        // Formula via control struct
         if ctl.formula $!= "" and ctl.y_var $== "";
-            { _yvar, _xvars } = __parse_formula(ctl.formula);
+            { _yvar, _xvars } = __parse_formula(_formula_raw);
             data = __selectVars(data, _yvar, _xvars);
         elseif ctl.y_var $!= "";
             data = __selectVars(data, ctl.y_var, ctl.x_vars);
@@ -226,30 +243,40 @@ proc (struct mgOut) = mg(data, ...);
           xbar, dname, hname, yname, xnames, xbarname, data_d, y, x, h, groupvar,
           timevar, zero_xx, zero_idx, datevec, cd_nt, pvalue_cd_nt, meanrho, used;
     local start_j, end_j, varname_cce_p;
-    local _yvar, _xvars;
+    local _yvar, _xvars, _formula_raw, _csa_from_formula;
 
     struct mgControl mgCtl_dflt;
     struct mgControl ctl;
     mgCtl_dflt = mgControlCreate();
 
-    // Positional formula: mg(data, "y ~ x1 + x2" [, ctl])
+    // Positional formula: mg(data, "y ~ x1 + x2 + csa(z)" [, ctl])
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
         ctl = dynargsGet(2, mgCtl_dflt);
-        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
-            ctl.x_csa = data[., ctl.x_csa_names];
+        { _formula_raw, _csa_from_formula } = __parse_csa(dynargsGet(1));
+        if not (rows(_csa_from_formula) == 1 and _csa_from_formula $== "");
+            if rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "";
+                ctl.x_csa_names = _csa_from_formula;
+            else;
+                ctl.x_csa_names = _csa_from_formula $| ctl.x_csa_names;
+            endif;
         endif;
-        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+        { _yvar, _xvars } = __parse_formula(_formula_raw);
         data = __selectVars(data, _yvar, _xvars);
     else;
         ctl = dynargsGet(1, mgCtl_dflt);
         if ctl.groupvar $!= "" and ctl.timevar $!= "";
             data = __reorderPanel(data, ctl.groupvar, ctl.timevar);
         endif;
-        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
-            ctl.x_csa = data[., ctl.x_csa_names];
-        endif;
         if ctl.formula $!= "" and ctl.y_var $== "";
-            { _yvar, _xvars } = __parse_formula(ctl.formula);
+            { _formula_raw, _csa_from_formula } = __parse_csa(ctl.formula);
+            if not (rows(_csa_from_formula) == 1 and _csa_from_formula $== "");
+                if rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "";
+                    ctl.x_csa_names = _csa_from_formula;
+                else;
+                    ctl.x_csa_names = _csa_from_formula $| ctl.x_csa_names;
+                endif;
+            endif;
+            { _yvar, _xvars } = __parse_formula(_formula_raw);
             data = __selectVars(data, _yvar, _xvars);
         elseif ctl.y_var $!= "";
             data = __selectVars(data, ctl.y_var, ctl.x_vars);
@@ -329,33 +356,54 @@ proc (struct mgOut) = cce_mg(data, ...);
           csa_vars, groupvar, timevar, zero_xx, zero_idx, datevec,
           cd_nt, pvalue_cd_nt, meanrho, used;
     local dh_i1, dhname_i1, start_j, end_j, varname_cce_p;
-    local _yvar, _xvars;
+    local _yvar, _xvars, _formula_raw, _csa_from_formula;
 
     struct mgControl mgCtl_dflt;
     struct mgControl ctl;
     mgCtl_dflt = mgControlCreate();
 
-    // Positional formula: cce_mg(data, "y ~ x1 + x2" [, ctl])
+    // Positional formula: cce_mg(data, "y ~ x1 + x2 + csa(z)" [, ctl])
     if dynargsCount() >= 1 and type(dynargsGet(1)) == 13;
         ctl = dynargsGet(2, mgCtl_dflt);
+        { _formula_raw, _csa_from_formula } = __parse_csa(dynargsGet(1));
+        if not (rows(_csa_from_formula) == 1 and _csa_from_formula $== "");
+            if rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "";
+                ctl.x_csa_names = _csa_from_formula;
+            else;
+                ctl.x_csa_names = _csa_from_formula $| ctl.x_csa_names;
+            endif;
+        endif;
         if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
             ctl.x_csa = data[., ctl.x_csa_names];
         endif;
-        { _yvar, _xvars } = __parse_formula(dynargsGet(1));
+        { _yvar, _xvars } = __parse_formula(_formula_raw);
         data = __selectVars(data, _yvar, _xvars);
     else;
         ctl = dynargsGet(1, mgCtl_dflt);
         if ctl.groupvar $!= "" and ctl.timevar $!= "";
             data = __reorderPanel(data, ctl.groupvar, ctl.timevar);
         endif;
-        if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
-            ctl.x_csa = data[., ctl.x_csa_names];
-        endif;
         if ctl.formula $!= "" and ctl.y_var $== "";
-            { _yvar, _xvars } = __parse_formula(ctl.formula);
+            { _formula_raw, _csa_from_formula } = __parse_csa(ctl.formula);
+            if not (rows(_csa_from_formula) == 1 and _csa_from_formula $== "");
+                if rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "";
+                    ctl.x_csa_names = _csa_from_formula;
+                else;
+                    ctl.x_csa_names = _csa_from_formula $| ctl.x_csa_names;
+                endif;
+            endif;
+            if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+                ctl.x_csa = data[., ctl.x_csa_names];
+            endif;
+            { _yvar, _xvars } = __parse_formula(_formula_raw);
             data = __selectVars(data, _yvar, _xvars);
-        elseif ctl.y_var $!= "";
-            data = __selectVars(data, ctl.y_var, ctl.x_vars);
+        else;
+            if not (rows(ctl.x_csa_names) == 1 and ctl.x_csa_names $== "");
+                ctl.x_csa = data[., ctl.x_csa_names];
+            endif;
+            if ctl.y_var $!= "";
+                data = __selectVars(data, ctl.y_var, ctl.x_vars);
+            endif;
         endif;
     endif;
 

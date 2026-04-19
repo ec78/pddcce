@@ -141,6 +141,95 @@ endp;
 
 
 /*
+** __parse_csa
+**
+** Strips csa(...) terms from a formula string and returns the variable names
+** found inside them. Enables syntax such as:
+**
+**   "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)"
+**   "log_rgdpo ~ log_ck + csa(log_hc, log_other)"
+**
+** Multiple csa() terms and comma-separated lists within a single term are
+** both supported. The returned csa_names can be passed directly to
+** ctl.x_csa_names. Returns csa_names = "" when no csa() term is present.
+**
+** Format:  { clean_formula, csa_names } = __parse_csa(formula)
+**
+** Input:   formula    Formula string, possibly containing csa(...) terms.
+**
+** Output:  clean_formula   Formula string with all csa(...) terms removed.
+**          csa_names       String array of variable names extracted from
+**                          csa() terms. "" if none found.
+*/
+proc (2) = __parse_csa(formula);
+    local csa_names, pos, pos_end, inner, clean, before, after, len;
+    local vi, vname, vars_arr;
+
+    csa_names = "";
+    clean     = formula;
+
+    pos = strindx(clean, "csa(", 1);
+
+    do while pos > 0;
+        len     = strlen(clean);
+        pos_end = strindx(clean, ")", pos);
+
+        if pos_end == 0;
+            errorlogat "__parse_csa: unmatched parenthesis in formula: " $+ formula;
+            end;
+        endif;
+
+        // Extract comma-separated variable names between csa( and )
+        inner    = strtrim(strsect(clean, pos + 4, pos_end - pos - 4));
+        vars_arr = strsplit(inner, ",");
+
+        for vi(1, rows(vars_arr), 1);
+            vname = strtrim(vars_arr[vi]);
+            if vname $!= "";
+                if rows(csa_names) == 1 and csa_names $== "";
+                    csa_names = vname;
+                else;
+                    csa_names = csa_names $| vname;
+                endif;
+            endif;
+        endfor;
+
+        // Rebuild formula without this csa(...) term
+        if pos > 1;
+            before = strtrim(strsect(clean, 1, pos - 1));
+        else;
+            before = "";
+        endif;
+        if pos_end < len;
+            after = strtrim(strsect(clean, pos_end + 1, len - pos_end));
+        else;
+            after = "";
+        endif;
+
+        // Strip a trailing "+" from before or a leading "+" from after
+        if strlen(before) > 0 and strsect(before, strlen(before), 1) $== "+";
+            before = strtrim(strsect(before, 1, strlen(before) - 1));
+        endif;
+        if strlen(after) > 0 and strsect(after, 1, 1) $== "+";
+            after = strtrim(strsect(after, 2, strlen(after) - 1));
+        endif;
+
+        if strlen(before) > 0 and strlen(after) > 0;
+            clean = before $+ " + " $+ after;
+        elseif strlen(before) > 0;
+            clean = before;
+        else;
+            clean = after;
+        endif;
+
+        pos = strindx(clean, "csa(", 1);
+    endo;
+
+    retp(clean, csa_names);
+endp;
+
+
+/*
 ** __selectVars
 **
 ** Reorders data columns to the required [group, time, y, x1, ..., xk] format,
