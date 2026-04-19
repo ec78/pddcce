@@ -75,6 +75,8 @@ proc (0) = plotResiduals(struct mgOut mgO);
     plotSetYLabel(&plt, "Residual SD");
     plotBar(plt, seqa(1, 1, mgO.ngroups)', mgO.sig_vec');
 
+    plotClearLayout();
+
 endp;
 
 
@@ -323,6 +325,8 @@ proc (0) = plotCoefficients(struct mgOut mgO);
         plotAddXY(ref_x, ref_y);
     endfor;
 
+    plotClearLayout();
+
 endp;
 
 
@@ -515,5 +519,7 @@ proc (0) = plotResidualACF(struct mgOut mgO, ...);
     // Upper and lower 95% confidence bands
     plotAddXY(lag_idx[1]|lag_idx[maxlag+1],  conf_band * ones(2, 1));
     plotAddXY(lag_idx[1]|lag_idx[maxlag+1], -conf_band * ones(2, 1));
+
+    plotClearLayout();
 
 endp;
