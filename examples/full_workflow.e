@@ -28,7 +28,7 @@ fname = __FILE_DIR $+ "penn_world.dta";
 data  = packr(loadd(fname, ". + date($year, '%Y')"));
 data  = order(data, "id"$|"year");
 
-// Base control struct — csa(log_hc) specifies log_hc as a CSA-only variable
+// Base control struct csa(log_hc) specifies log_hc as a CSA-only variable
 // directly inside the formula string, no separate x_csa_names needed.
 ctl = mgControlCreate();
 ctl.formula = "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)";
