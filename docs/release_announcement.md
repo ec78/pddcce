@@ -25,6 +25,7 @@ dccelib brings this framework — and its extensions — to GAUSS with a validat
 
 All estimators support:
 - **Formula-string API**: `mg(data, "y ~ x1 + x2")` or `ctl.formula = "y ~ x1 + x2"` — no manual column selection required
+- **Inline CSA specification**: `csa()` inside the formula string — `"y ~ x1 + x2 + csa(z)"` — eliminates the need for a separate `x_csa_names` field. Multiple variables: `csa(z1, z2)`.
 - **Named variable selection**: `ctl.y_var`, `ctl.x_vars`, `ctl.x_csa_names`, `ctl.groupvar`, `ctl.timevar`
 - **I(1) extension** (`ctl.i1 = 1`): adds differenced CSAs for integrated regressors (Kapetanios, Pesaran & Yamagata 2011)
 - **Two-way CCE** (`ctl.two_way = 1`): time-demeaning for two-way factor structures (Bai 2009)

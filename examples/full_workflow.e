@@ -28,10 +28,10 @@ fname = __FILE_DIR $+ "penn_world.dta";
 data  = packr(loadd(fname, ". + date($year, '%Y')"));
 data  = order(data, "id"$|"year");
 
-// Base control struct formula and extra CSA variable used throughout
+// Base control struct — csa(log_hc) specifies log_hc as a CSA-only variable
+// directly inside the formula string, no separate x_csa_names needed.
 ctl = mgControlCreate();
-ctl.formula     = "log_rgdpo ~ log_ck + log_ngd";
-ctl.x_csa_names = "log_hc";
+ctl.formula = "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)";
 
 // -----------------------------------------------------------------------
 // 2. Baseline MG does cross-sectional dependence exist?
@@ -135,10 +135,9 @@ print "STEP 5: Dynamic CCE Mean Group (y_lags=1)";
 print "=================================================================";
 
 ctl_d = mgControlCreate();
-ctl_d.formula     = "log_rgdpo ~ log_ck + log_ngd";
-ctl_d.x_csa_names = "log_hc";
-ctl_d.y_lags      = 1;
-ctl_d.cr_lags     = 3;
+ctl_d.formula  = "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)";
+ctl_d.y_lags   = 1;
+ctl_d.cr_lags  = 3;
 
 struct mgOut dcceO;
 dcceO = dcce_mg(data, ctl_d);

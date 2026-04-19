@@ -52,7 +52,7 @@ cceO2 = cce_mg(packr(data), ctl2);
 // Approach 3: ctl.formula (Wilkinson formula string)
 // -----------------------------------------------------------------------
 print "=================================================================";
-print "Approach 3: ctl.formula (formula string)";
+print "Approach 3: ctl.formula with separate x_csa_names";
 print "=================================================================";
 
 ctl3 = mgControlCreate();
@@ -62,11 +62,22 @@ ctl3.x_csa_names = "log_hc";
 cceO3 = cce_mg(packr(data), ctl3);
 
 // -----------------------------------------------------------------------
-// Confirm all three give the same coefficients
+// Approach 4: csa() inline in formula string
 // -----------------------------------------------------------------------
 print "=================================================================";
-print "Coefficient check (all three should match)";
+print "Approach 4: csa() inline in formula string";
+print "=================================================================";
+
+// CSA variable specified directly inside the formula — no separate
+// x_csa_names field needed. Equivalent to Approach 3.
+cceO4 = cce_mg(packr(data), "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)");
+
+// -----------------------------------------------------------------------
+// Confirm all four give the same coefficients
+// -----------------------------------------------------------------------
+print "=================================================================";
+print "Coefficient check (all four should match)";
 print "=================================================================";
 printCoefCompare(cceO1.mg_vars[1:2],
-    cceO1.b_mg[1:2] ~ cceO2.b_mg[1:2] ~ cceO3.b_mg[1:2],
-    "Approach 1" $| "Approach 2" $| "Approach 3");
+    cceO1.b_mg[1:2] ~ cceO2.b_mg[1:2] ~ cceO3.b_mg[1:2] ~ cceO4.b_mg[1:2],
+    "Approach 1" $| "Approach 2" $| "Approach 3" $| "Approach 4");

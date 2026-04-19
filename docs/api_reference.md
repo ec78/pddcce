@@ -80,8 +80,8 @@ ctl = mgControlCreate();
 | `zero_id` | matrix | `0` | Group ID for the normalization reference group. |
 | `y_var` | string | `""` | Name of the dependent variable column. If set, `data` columns are reordered automatically. |
 | `x_vars` | string array | `""` | Names of regressor columns (`"x1" $\| "x2"`). Used with `y_var`. |
-| `formula` | string | `""` | Wilkinson formula string `"y ~ x1 + x2"`. Overrides `y_var`/`x_vars` when set. Columns are auto-selected and reordered. |
-| `x_csa_names` | string array | `""` | Column name(s) of extra CSA variables in `data` (string alternative to `x_csa`). Resolved before column selection, so pass the full `data` that contains these columns. |
+| `formula` | string | `""` | Wilkinson formula string `"y ~ x1 + x2"`. Overrides `y_var`/`x_vars` when set. Columns are auto-selected and reordered. Supports inline `csa()` terms: `"y ~ x1 + x2 + csa(z)"` — see below. |
+| `x_csa_names` | string array | `""` | Column name(s) of extra CSA variables in `data` (string alternative to `x_csa`). Resolved before column selection, so pass the full `data` that contains these columns. Superseded by `csa()` in the formula when both are present (they are merged). |
 | `groupvar` | string | `""` | Name of the panel ID column. Triggers column reordering to `[groupvar, timevar, y, x...]`. Use when the panel ID is not column 1. |
 | `timevar` | string | `""` | Name of the time column. Used together with `groupvar`. |
 | `no_xbar_names` | string array | `""` | Variable names to exclude from CSA (string alternative to `no_xbar`). |
@@ -197,6 +197,15 @@ When `formula` is supplied, `data` may contain any set of columns in any order; 
 formula determines which are used as y and regressors. If `formula` is omitted, `data`
 must already be ordered `[group, time, y, x₁, ..., xₖ]` (or use `mgCtl.y_var` / `mgCtl.x_vars`).
 
+**Inline CSA specification:** Extra CSA-only variables can be embedded directly in any formula string using `csa()`:
+
+```
+"y ~ x1 + x2 + csa(z)"          // z used only as CSA proxy, not as regressor
+"y ~ x1 + csa(z1, z2)"          // multiple CSA variables, comma-separated
+```
+
+This is equivalent to setting `ctl.x_csa_names = "z"` separately. If both `csa()` and `x_csa_names` are present, the variable lists are merged.
+
 **Returns:** `mgOut` struct.
 
 **Notes:**
@@ -245,11 +254,11 @@ proc (1) = cce_mg(data [, mgCtl]);
 
 **Examples:**
 ```gauss
-// Formula string
+// Inline csa() — most concise, no separate control struct needed
 struct mgOut cceO;
-cceO = cce_mg(data, "log_rgdpo ~ log_ck + log_ngd");
+cceO = cce_mg(data, "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)");
 
-// Formula + extra CSA variable by name (pass full data containing log_hc)
+// Equivalent: x_csa_names in control struct
 struct mgControl ctl;
 ctl = mgControlCreate();
 ctl.formula     = "log_rgdpo ~ log_ck + log_ngd";
@@ -648,22 +657,21 @@ proc (1) = pcce_mg(data [, mgCtl, num_pc]);
 ```gauss
 library dccelib;
 
-struct mgControl ctl;
-ctl = mgControlCreate();
-ctl.formula     = "log_rgdpo ~ log_ck + log_ngd";
-ctl.x_csa_names = "log_hc";
-
-// Auto PC selection (Ahn-Horenstein ER criterion)
+// Inline csa() — auto PC selection
 struct mgOut pcceO;
-pcceO = pcce_mg(data, ctl);
+pcceO = pcce_mg(data, "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)");
 
 print "Model: " $+ pcceO.model;
 
 // Force 2 PCs
-pcceO_2 = pcce_mg(data, ctl, 2);
+pcceO_2 = pcce_mg(data, "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)", 2);
 
-// Positional formula string
-pcceO_f = pcce_mg(data, "log_rgdpo ~ log_ck + log_ngd", ctl);
+// Via control struct (equivalent)
+struct mgControl ctl;
+ctl = mgControlCreate();
+ctl.formula     = "log_rgdpo ~ log_ck + log_ngd";
+ctl.x_csa_names = "log_hc";
+pcceO_c = pcce_mg(data, ctl);
 ```
 
 ---

@@ -85,14 +85,13 @@ ctrl.cr_lags     = 1;           // Number of lags of cross-sectional averages
 ctrl.pooled      = 1;           // Also estimate pooled CCE
 ctrl.i1          = 0;           // I(1) extension (KPY 2011)
 ctrl.two_way     = 0;           // Two-way factor structure
-ctrl.x_csa_names = "log_hc";   // Extra CSA variable by column name
-
-// Estimate via formula string (v1.2.0+)
+// Estimate via formula string with inline csa() (v1.2.0+)
 struct mgOut out;
-out = dcce_mg(data, "log_rgdpo ~ log_ck + log_ngd", ctrl);
+out = dcce_mg(data, "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)", ctrl);
 
-// Equivalent: formula in the control struct
-ctrl.formula = "log_rgdpo ~ log_ck + log_ngd";
+// Equivalent: formula in the control struct with separate x_csa_names
+ctrl.formula     = "log_rgdpo ~ log_ck + log_ngd";
+ctrl.x_csa_names = "log_hc";   // Extra CSA variable by column name
 out = dcce_mg(data, ctrl);
 ```
 

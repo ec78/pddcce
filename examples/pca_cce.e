@@ -39,8 +39,7 @@ print "BASELINE: Standard CCE-MG";
 print "=================================================================";
 
 ctl = mgControlCreate();
-ctl.formula     = "log_rgdpo ~ log_ck + log_ngd";
-ctl.x_csa_names = "log_hc";   // extra CSA variable by name
+ctl.formula = "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)";
 
 struct mgOut cceO;
 cceO = cce_mg(data, ctl);
@@ -53,9 +52,8 @@ print "PC-CCE: Automatic PC selection (Ahn-Horenstein 2013)";
 print "=================================================================";
 
 ctl_pc = mgControlCreate();
-ctl_pc.formula     = "log_rgdpo ~ log_ck + log_ngd";
-ctl_pc.x_csa_names = "log_hc";
-ctl_pc.report = 1;
+ctl_pc.formula = "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)";
+ctl_pc.report  = 1;
 
 struct mgOut pcceO;
 pcceO = pcce_mg(data, ctl_pc);    // num_pc=0 → automatic selection
@@ -84,11 +82,10 @@ print "PC-CCE via positional formula string";
 print "=================================================================";
 
 ctl_f = mgControlCreate();
-ctl_f.x_csa_names = "log_hc";
 ctl_f.report = 1;
 
 struct mgOut pcceO_f;
-pcceO_f = pcce_mg(data, "log_rgdpo ~ log_ck + log_ngd", ctl_f);
+pcceO_f = pcce_mg(data, "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)", ctl_f);
 
 print "Model: " $+ pcceO_f.model;
 print "";
