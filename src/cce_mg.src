@@ -256,7 +256,7 @@ proc (struct mgOut) = mg(data, ...);
         endif;
     endif;
 
-    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, ctl.x_csa, ctl.y_lags, ctl.groupvar, ctl.timevar);
+    { yname, xnames, groupvar, timevar, dname } = __getnames(data, ctl.x_common, miss(), ctl.y_lags, ctl.groupvar, ctl.timevar);
 
     if sumc(sumc(ismiss(data)));
         errorlogat "'mg': Missing Data Somewhere! This code does not allow it.";
