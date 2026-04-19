@@ -19,8 +19,8 @@
 **    2. Improves power when factors are sparse relative to observables
 **    3. Is robust when the rank condition barely passes or fails
 **
-**  REFERENCE
-**  ---------
+**  REFERENCES
+**  ----------
 **  Kapetanios, G., Pesaran, M.H. & Yamagata, T. (2011). Panels with
 **    nonstationary multifactor error structures. Journal of Econometrics,
 **    160(2), 326-348.
@@ -28,19 +28,32 @@
 **  Ahn, S.C. & Horenstein, A.R. (2013). Eigenvalue ratio test for the number
 **    of factors. Econometrica, 81(3), 1203-1227.
 **
-**  NOTE: This function requires the GAUSS Machine Learning (GML) library
-**  (pcaFit procedure). Install via the GAUSS Package Manager, then load
-**  with `library gml;` before calling pcce_mg().
+**  Casalin, F., Fazio, G. & Sleibi, Y. (2026). Global shocks and the
+**    debt-growth nexus. Economic Inquiry, 64(2), 748-767.
+**    https://doi.org/10.1111/ecin.70045
 **
-**  Format:  pcceO = pcce_mg(data [, mgCtl, num_pc])
+**  ACKNOWLEDGMENT
+**  --------------
+**  The inclusion of this procedure was prompted by a suggestion from
+**  Dr. Yosra Sleibi (University of Glasgow), whose work on global common
+**  shocks highlighted the value of PCA-based factor proxies when the
+**  number of cross-sectional averages is large relative to the number of
+**  underlying factors.
 **
-**  Input:   data      Panel dataframe: [group, time, y, x1, ..., xk].
-**                     Same format as cce_mg(). Sorted by group then time.
+**  Format:  pcceO = pcce_mg(data [, formula, mgCtl, num_pc])
+**
+**  Input:   data      Panel dataframe. May contain any columns when a
+**                     formula string or ctl.formula is provided; otherwise
+**                     must be ordered [group, time, y, x1, ..., xk].
 **                     No missing values (use packr() first).
 **
+**           formula   Optional formula string: "y ~ x1 + x2". Selects and
+**                     reorders columns from data automatically.
+**
 **           mgCtl     Optional mgControl struct. All standard ctl fields apply
-**                     (y_var, x_vars, x_csa, no_xbar, report, etc.).
-**                     ctl.cr_lags also applies to lagged PC scores.
+**                     (formula, y_var, x_vars, x_csa_names, no_xbar,
+**                     report, etc.). ctl.cr_lags also applies to lagged
+**                     PC scores.
 **
 **           num_pc    Optional scalar. Number of principal components to
 **                     retain as factor proxies. Default: 0 = automatic
@@ -51,17 +64,18 @@
 **                     string is "CCE-MG [PC-CCE, m=<num_pc>]".
 **
 **  Usage:
-**    library dccelib, gml;
+**    library dccelib;
 **    struct mgControl ctl;
 **    ctl = mgControlCreate();
-**    ctl.x_csa = data[., "log_hc"];
+**    ctl.formula     = "log_rgdpo ~ log_ck + log_ngd";
+**    ctl.x_csa_names = "log_hc";
 **
 **    struct mgOut pcceO;
-**    pcceO = pcce_mg(reg_data, ctl);           // auto PC selection
-**    pcceO = pcce_mg(reg_data, ctl, 2);        // force 2 PCs
+**    pcceO = pcce_mg(data, ctl);           // auto PC selection
+**    pcceO = pcce_mg(data, ctl, 2);        // force 2 PCs
 **
 **  To check the rank condition before and after PCA:
-**    rankO = cce_rank(reg_data);               // check raw CSA rank
+**    rankO = cce_rank(data);               // check raw CSA rank
 **    print_cce_rank(rankO);
 */
 proc (struct mgOut) = pcce_mg(data, ...);
