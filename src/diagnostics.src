@@ -400,7 +400,7 @@ proc (struct longRunOut) = longRunMG(struct mgOut mgO, report=1);
         grad = zeros(k, 1);
         grad[1:p]  = beta[j] / (rho^2);   // d/d(phi_i): beta_j / rho^2
         grad[p+j]  = 1 / rho;             // d/d(beta_j): 1 / rho
-        lr_se[j] = sqrt(grad' * mgO.cov_mg * grad);
+        lr_se[j] = sqrt(grad' * mgO.cov_mg[1:k, 1:k] * grad);
     endfor;
 
     lr_tval = lr_coef ./ lr_se;
