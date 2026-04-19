@@ -19,6 +19,7 @@ This document provides a complete reference for all public procedures in dccelib
 - [Utility Procedures](#utility-procedures)
   - [mgControlCreate](#mgcontrolcreate)
   - [coeftable](#coeftable)
+  - [printCoefCompare](#printcoefcompare)
 - [Diagnostic Tests](#diagnostic-tests)
   - [cdtest](#cdtest)
   - [cips](#cips)
@@ -30,6 +31,7 @@ This document provides a complete reference for all public procedures in dccelib
   - [print_cce_rank](#print_cce_rank)
   - [westerlundTest](#westerlundtest)
   - [print_westerlund](#print_westerlund)
+- [PC-CCE Estimator](#pc-cce-estimator)
   - [pcce_mg](#pcce_mg)
 - [Bias Correction](#bias-correction)
   - [hpj](#hpj)
@@ -78,6 +80,10 @@ ctl = mgControlCreate();
 | `zero_id` | matrix | `0` | Group ID for the normalization reference group. |
 | `y_var` | string | `""` | Name of the dependent variable column. If set, `data` columns are reordered automatically. |
 | `x_vars` | string array | `""` | Names of regressor columns (`"x1" $\| "x2"`). Used with `y_var`. |
+| `formula` | string | `""` | Wilkinson formula string `"y ~ x1 + x2"`. Overrides `y_var`/`x_vars` when set. Columns are auto-selected and reordered. |
+| `x_csa_names` | string array | `""` | Column name(s) of extra CSA variables in `data` (string alternative to `x_csa`). Resolved before column selection, so pass the full `data` that contains these columns. |
+| `groupvar` | string | `""` | Name of the panel ID column. Triggers column reordering to `[groupvar, timevar, y, x...]`. Use when the panel ID is not column 1. |
+| `timevar` | string | `""` | Name of the time column. Used together with `groupvar`. |
 | `no_xbar_names` | string array | `""` | Variable names to exclude from CSA (string alternative to `no_xbar`). |
 
 ---
@@ -243,11 +249,17 @@ proc (1) = cce_mg(data [, mgCtl]);
 struct mgOut cceO;
 cceO = cce_mg(data, "log_rgdpo ~ log_ck + log_ngd");
 
-// Formula + extra CSA variable
+// Formula + extra CSA variable by name (pass full data containing log_hc)
 struct mgControl ctl;
 ctl = mgControlCreate();
-ctl.x_csa = data[., "log_hc"];
-cceO = cce_mg(data, "log_rgdpo ~ log_ck + log_ngd", ctl);
+ctl.formula     = "log_rgdpo ~ log_ck + log_ngd";
+ctl.x_csa_names = "log_hc";
+cceO = cce_mg(data, ctl);
+
+// Extra CSA variable as matrix (traditional approach)
+ctl2 = mgControlCreate();
+ctl2.x_csa = data[., "log_hc"];
+cceO = cce_mg(data, "log_rgdpo ~ log_ck + log_ngd", ctl2);
 ```
 
 ---
@@ -332,6 +344,43 @@ coef_ck = ct[1, 1];
 se_ck   = ct[1, 2];
 t_ck    = ct[1, 3];
 p_ck    = ct[1, 4];
+```
+
+---
+
+### printCoefCompare
+
+Prints a formatted coefficient comparison table with aligned columns.
+
+```gauss
+proc (0) = printCoefCompare(varnames, coef_mat, labels);
+```
+
+**Arguments:**
+
+| Parameter | Description |
+|-----------|-------------|
+| `varnames` | k×1 string array of variable names. |
+| `coef_mat` | k×m numeric matrix of coefficient estimates. Each column is one model. |
+| `labels` | m×1 string array of column header labels (one per model). |
+
+**Notes:**
+- Column width for the variable-name column is set automatically based on the longest name.
+- Each coefficient column is right-justified and formatted to 6 decimal places.
+- Useful for comparing multiple models or estimators side by side without manual `sprintf` formatting.
+
+**Example:**
+```gauss
+printCoefCompare(cceO.mg_vars[1:2],
+    mgO.b_mg[1:2] ~ cceO.b_mg[1:2] ~ dcceO.b_mg[1:2],
+    "MG" $| "CCE-MG" $| "DCCE-MG");
+```
+
+Output:
+```
+                    MG      CCE-MG     DCCE-MG
+log_ck        0.305300    0.316743    0.153173
+log_ngd       0.279783    0.089055    0.009159
 ```
 
 ---
@@ -564,11 +613,15 @@ Prints Westerlund test results.
 proc (0) = print_westerlund(wO);
 ```
 
+---
+
+## PC-CCE Estimator
+
 ### pcce_mg
 
-**Principal Component CCE Mean Group (PC-CCE-MG) estimator.** Uses PCA on the cross-sectional average matrix to construct factor proxies, improving CCE robustness when the rank condition is borderline or when the number of common factors exceeds the number of observables.
+**Principal Component CCE Mean Group (PC-CCE-MG) estimator.** Replaces the raw cross-sectional average matrix with its leading principal components before augmenting each unit's regression. This improves CCE consistency and power when the CSA matrix is near rank-deficient (many near-collinear regressors) or when the number of common factors is small relative to the number of observables.
 
-**Requires:** GAUSS Machine Learning (GML) library (`library gml;`).
+No external library dependencies — PCA is computed via GAUSS's built-in SVD.
 
 ```gauss
 proc (1) = pcce_mg(data [, formula, mgCtl, num_pc]);
@@ -579,32 +632,38 @@ proc (1) = pcce_mg(data [, mgCtl, num_pc]);
 
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
-| `data` | Yes | — | Panel dataframe. When using a formula, may contain any columns. |
+| `data` | Yes | — | Panel dataframe. When using a formula or `ctl.formula`, may contain any columns. |
 | `formula` | No | — | Formula string: `"y ~ x1 + x2"`. Selects and reorders columns from `data`. |
-| `mgCtl` | No | defaults | `mgControl` struct. All standard fields apply. |
+| `mgCtl` | No | defaults | `mgControl` struct. All standard fields apply, including `x_csa_names` and `formula`. |
 | `num_pc` | No | `0` (auto) | Number of principal components to retain. `0` = automatic selection via the Ahn-Horenstein (2013) eigenvalue ratio criterion. |
 
 **Returns:** `mgOut` struct. Same fields as `cce_mg()`. The `.model` string reads `"CCE Mean Group [PC-CCE, m=<num_pc>]"`.
 
 **Notes:**
-- Automatically checks for GML availability. If `pcaFit` is not found, exits with an informative error.
-- The ER criterion caps at `k+1` (total CSA columns). For most panels, the auto-selected number equals the number of dominant eigenvalues.
-- Use `cce_rank()` first to diagnose whether PCA augmentation is needed.
+- The ER criterion selects the number of PCs by maximizing the ratio of adjacent eigenvalues, capped at the total number of CSA columns.
+- Use `cce_rank()` first to assess whether PCA augmentation is needed.
+- Supports `x_csa_names` for extra CSA variables by name (pass the full `data`).
 
 **Example:**
 ```gauss
-library dccelib, gml;
+library dccelib;
 
 struct mgControl ctl;
 ctl = mgControlCreate();
-ctl.x_csa = data[., "log_hc"];
+ctl.formula     = "log_rgdpo ~ log_ck + log_ngd";
+ctl.x_csa_names = "log_hc";
 
-// Auto PC selection
+// Auto PC selection (Ahn-Horenstein ER criterion)
 struct mgOut pcceO;
-pcceO = pcce_mg(reg_data, ctl);
+pcceO = pcce_mg(data, ctl);
+
+print "Model: " $+ pcceO.model;
 
 // Force 2 PCs
-pcceO = pcce_mg(reg_data, ctl, 2);
+pcceO_2 = pcce_mg(data, ctl, 2);
+
+// Positional formula string
+pcceO_f = pcce_mg(data, "log_rgdpo ~ log_ck + log_ngd", ctl);
 ```
 
 ---
@@ -886,6 +945,7 @@ mgOutToLatexMulti(mgO|cceO|dcceO,
 ```
 1. Load and prepare data
    packr() → order() → select columns [group, time, y, x...]
+   Or use ctl.formula / ctl.groupvar+timevar to avoid manual reordering.
 
 2. Test for cross-sectional dependence
    mg() → inspect cd_stat on MG residuals
@@ -893,25 +953,31 @@ mgOutToLatexMulti(mgO|cceO|dcceO,
 3. Test for unit roots
    cips() per variable → print_cips()
 
-4. Estimate CCE-MG (or DCCE-MG if series are persistent)
-   cce_mg() / dcce_mg()
+4. Check CCE rank condition (optional but recommended)
+   cce_rank() → print_cce_rank()
+   → if rank < k+1: consider pcce_mg() instead of cce_mg()
+
+5. Estimate CCE-MG (or DCCE-MG if series are persistent)
+   cce_mg() / dcce_mg() / pcce_mg()
    → use i1=1 if series are I(1)
    → use two_way=1 if two-way factor structure suspected
+   → use x_csa_names to pass extra CSA variables by column name
 
-5. Test slope homogeneity
+6. Test slope homogeneity
    slopehomo() → print_slopehomo()
    → if H0 rejected: MG estimates are appropriate
    → if H0 not rejected: pooled CCE may be efficient (pooled=1)
 
-6. Check residual CD
+7. Check residual CD
    cceO.cd_stat → should be small after CCE augmentation
 
-7. Bias correction (if dynamic model with moderate T)
+8. Bias correction (if dynamic model with moderate T)
    hpj() → HPJ-corrected b_mg
 
-8. Bootstrap SE (robustness check)
+9. Bootstrap SE (robustness check)
    mgBootstrap()
 
-9. Export results
-   mgOutToLatex() / mgOutToLatexMulti()
+10. Compare and export results
+    printCoefCompare() → aligned side-by-side table
+    mgOutToLatex() / mgOutToLatexMulti() → LaTeX export
 ```

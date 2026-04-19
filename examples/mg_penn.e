@@ -59,10 +59,6 @@ mgO3 = mg(data, ctl);
 print "=================================================================";
 print "Coefficient check (all three should match)";
 print "=================================================================";
-print "            Traditional   Formula arg   ctl.formula";
-for i(1, 2, 1);
-    print mgO.mg_vars[i] $+
-          "     " $+ ntos(mgO.b_mg[i], 6) $+
-          "   "   $+ ntos(mgO2.b_mg[i], 6) $+
-          "   "   $+ ntos(mgO3.b_mg[i], 6);
-endfor;
+printCoefCompare(mgO.mg_vars[1:2],
+    mgO.b_mg[1:2] ~ mgO2.b_mg[1:2] ~ mgO3.b_mg[1:2],
+    "Traditional" $| "Formula arg" $| "ctl.formula");

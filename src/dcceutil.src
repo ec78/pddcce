@@ -1110,3 +1110,51 @@ proc (1) = validatePanelData(data);
 
     retp(ok);
 endp;
+
+
+/*
+**> printCoefCompare
+**
+** Print a formatted coefficient comparison table with aligned columns.
+**
+** Usage:
+**   varnames  = mgO1.mg_vars[1:k];
+**   coef_mat  = mgO1.b_mg[1:k] ~ mgO2.b_mg[1:k] ~ mgO3.b_mg[1:k];
+**   labels    = "Model 1" $| "Model 2" $| "Model 3";
+**   printCoefCompare(varnames, coef_mat, labels);
+**
+** Input:   varnames    k x 1 string array of variable names
+**          coef_mat    k x m numeric matrix (k variables, m models)
+**          labels      m x 1 string array of column header labels
+*/
+proc (0) = printCoefCompare(varnames, coef_mat, labels);
+    local k, m, i, j, name_w, row_str, header, fmt_name;
+
+    k = rows(varnames);
+    m = cols(coef_mat);
+
+    // Width of name column: max variable name length + 2
+    name_w = 2;
+    for i(1, k, 1);
+        if strlen(varnames[i]) + 2 > name_w;
+            name_w = strlen(varnames[i]) + 2;
+        endif;
+    endfor;
+    fmt_name = "%-" $+ ntos(name_w, 1) $+ "s";
+
+    // Header row
+    header = sprintf(fmt_name, "");
+    for j(1, m, 1);
+        header = header $+ sprintf("%14s", labels[j]);
+    endfor;
+    print header;
+
+    // Data rows
+    for i(1, k, 1);
+        row_str = sprintf(fmt_name, varnames[i]);
+        for j(1, m, 1);
+            row_str = row_str $+ sprintf("%14.6f", coef_mat[i, j]);
+        endfor;
+        print row_str;
+    endfor;
+endp;

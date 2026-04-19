@@ -89,12 +89,12 @@
 **Talking points:**
 
 1. **What the library provides at a glance.**
-   - Three core panel estimators: `mg()`, `cce_mg()`, `dcce_mg()`
+   - Four core panel estimators: `mg()`, `cce_mg()`, `dcce_mg()`, `pcce_mg()` (PC-CCE-MG)
    - Pooled CCE alongside MG via a single flag (`pooled`)
    - Newey-West SE pooled estimator: `pcceNW()`
-   - Diagnostic tests: `cips()` unit root, `slopehomo()` slope homogeneity
+   - Diagnostic tests: `cips()` unit root, `slopehomo()` slope homogeneity, `cce_rank()` CSA rank check
    - Post-estimation tools: `hpj()` bias correction, `mgBootstrap()` wild bootstrap SE
-   - Output tools: `mgOutToLatex()`, `mgOutToLatexMulti()`, `coeftable()`
+   - Output tools: `mgOutToLatex()`, `mgOutToLatexMulti()`, `coeftable()`, `printCoefCompare()`
 
 2. **The struct-based API: why it matters.**
    - All options pass through an `mgControl` struct rather than a long positional argument list.
@@ -102,9 +102,15 @@
    - It also makes backward compatibility easier — new options can be added to the struct without breaking existing call signatures.
    - Compare to Stata's `xtmg` syntax with string options; the struct approach is more robust for scripted workflows.
 
-3. **Key control flags and what they unlock:**
+3. **The formula-string API: reducing boilerplate.**
+   - New in v1.2.0: pass a Wilkinson-style formula string as the second argument: `mg(data, "y ~ x1 + x2")`. The library selects and reorders columns automatically.
+   - Or set `ctl.formula = "y ~ x1 + x2"` in the control struct.
+   - Use `ctl.x_csa_names = "log_hc"` to specify extra CSA variables by column name, eliminating the need to manually extract and align matrix columns.
+   - Use `ctl.groupvar = "id"` and `ctl.timevar = "year"` when the panel and time columns are not in the first two positions.
+
+4. **Key control flags and what they unlock:**
    - `y_lags` / `cr_lags`: add dynamics.
-   - `x_csa`: pass in extra variables whose cross-sectional averages should be included (e.g., human capital as an additional factor proxy even if it's not a regressor).
+   - `x_csa` / `x_csa_names`: pass extra variables whose cross-sectional averages should be included (e.g., human capital as an additional factor proxy even if it's not a regressor).
    - `pooled`: estimate pooled CCE in the same call.
    - `i1`: apply the Kapetanios-Pesaran-Yamagata (2011) I(1) extension — adds differenced CSAs to handle unit roots in the common factors.
    - `two_way`: time-demean the data before CCE augmentation, addressing a two-way factor structure (Bai 2009).
@@ -188,13 +194,19 @@
    - dccelib implements the wild Rademacher bootstrap, which is robust to heteroskedasticity and serial correlation in the errors.
    - Discuss computational cost and recommend its use as a robustness check rather than a default.
 
-5. **Multi-model LaTeX export (`mgOutToLatexMulti()`).**
+5. **PC-CCE-MG: PCA augmentation when CSAs are rank-deficient (`pcce_mg()`).**
+   - When the cross-sectional average matrix is near rank-deficient — many near-collinear averages relative to the number of common factors — standard CCE augmentation becomes unreliable. `pcce_mg()` replaces the raw CSA matrix with its leading principal components before augmenting unit regressions.
+   - No external library required: PCA is computed via GAUSS's built-in SVD.
+   - The number of PCs can be selected automatically using the Ahn-Horenstein (2013) eigenvalue ratio criterion, or fixed by the user.
+   - Use `cce_rank()` first to check whether the rank condition is satisfied; if not, `pcce_mg()` is the recommended remedy.
+
+6. **Multi-model LaTeX export (`mgOutToLatexMulti()`).**
    - In practice, you want to show MG, CCE-MG, and DCCE-MG side by side in one table to make the progression of estimates visible to readers.
    - `mgOutToLatexMulti()` takes a list of estimation output structs and constructs a single, formatted multi-column table in LaTeX. Demonstrate the call signature.
 
-6. **`coeftable()` for downstream analysis.**
-   - Sometimes you need the numeric results as a matrix for further manipulation (e.g., plotting coefficient distributions, computing Wald statistics).
-   - `coeftable()` returns a structured numeric matrix from the estimation output. Show a brief use case.
+7. **`coeftable()` and `printCoefCompare()` for downstream analysis.**
+   - `coeftable()` returns a k×4 numeric matrix [coef, se, t, p] for further manipulation (Wald tests, custom plots).
+   - `printCoefCompare(varnames, coef_mat, labels)` prints aligned side-by-side comparison tables directly to the console — useful for exploratory comparison of MG vs. CCE-MG vs. DCCE-MG without constructing a full LaTeX table.
 
 ---
 
@@ -206,7 +218,7 @@
 
 2. **Download and installation.** Available via the GAUSS Application Center. Link to the GitHub repository for issues and examples. The Penn World Tables replication script is included.
 
-3. **Citation.** Provide the BibTeX entry for the dccelib library (Clower, Aptech Systems, v0.3.0).
+3. **Citation.** Provide the BibTeX entry for the dccelib library (Clower, Aptech Systems, v1.2.0).
 
 4. **Roadmap / future work.** Possible additions: spatial CCE, factor-augmented VAR extension, automatic lag selection via information criteria built into the API, GAUSS 25 compatibility updates.
 

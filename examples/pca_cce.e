@@ -116,10 +116,6 @@ print "=================================================================";
 print "Coefficient comparison: CCE-MG vs. PC-CCE";
 print "=================================================================";
 
-print "               CCE-MG        PC-CCE (auto)";
-print "               ------        -------------";
-for i(1, 2, 1);
-    print cceO.mg_vars[i] $+
-          "     " $+ ntos(cceO.b_mg[i], 6) $+
-          "     " $+ ntos(pcceO.b_mg[i], 6);
-endfor;
+printCoefCompare(cceO.mg_vars[1:2],
+    cceO.b_mg[1:2] ~ pcceO.b_mg[1:2],
+    "CCE-MG" $| "PC-CCE (auto)");

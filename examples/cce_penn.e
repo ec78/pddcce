@@ -67,10 +67,6 @@ cceO3 = cce_mg(packr(data), ctl3);
 print "=================================================================";
 print "Coefficient check (all three should match)";
 print "=================================================================";
-print "            Approach 1    Approach 2    Approach 3";
-for i(1, 2, 1);
-    print cceO1.mg_vars[i] $+
-          "     " $+ ntos(cceO1.b_mg[i], 6) $+
-          "   "   $+ ntos(cceO2.b_mg[i], 6) $+
-          "   "   $+ ntos(cceO3.b_mg[i], 6);
-endfor;
+printCoefCompare(cceO1.mg_vars[1:2],
+    cceO1.b_mg[1:2] ~ cceO2.b_mg[1:2] ~ cceO3.b_mg[1:2],
+    "Approach 1" $| "Approach 2" $| "Approach 3");

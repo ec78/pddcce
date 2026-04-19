@@ -1,6 +1,6 @@
 # dccelib: A GAUSS Library for Panel Data Estimation with Cross-Sectional Dependence
 
-**Version 0.3.0**
+**Version 1.2.0**
 
 Eric Clower, Aptech Systems
 
@@ -8,7 +8,7 @@ Eric Clower, Aptech Systems
 
 ## Abstract
 
-We introduce dccelib, a GAUSS econometrics library implementing panel data estimators for large heterogeneous panels subject to cross-sectional dependence. The library provides three core estimators based on the common correlated effects (CCE) framework of Pesaran (2006): the Mean Group (MG) estimator, the CCE Mean Group (CCE-MG) estimator, and a dynamic extension (DCCE-MG) that accommodates lagged dependent variables and lags of cross-sectional averages. Companion procedures include the Pesaran-Yamagata (2008) slope homogeneity test, the Pesaran (2007) CIPS panel unit root test, a half-panel jackknife bias correction following Dhaene and Jochmans (2015), wild bootstrap standard errors, and publication-ready LaTeX table export. All core estimators are validated against R's `plm` package to six decimal places on Penn World Tables data. The library fills a gap in GAUSS's econometric toolkit for applied researchers working with macro panels, international datasets, and any cross-sectional setting where unobserved common factors generate residual correlation across units.
+We introduce dccelib, a GAUSS econometrics library implementing panel data estimators for large heterogeneous panels subject to cross-sectional dependence. The library provides four core estimators based on the common correlated effects (CCE) framework of Pesaran (2006): the Mean Group (MG) estimator, the CCE Mean Group (CCE-MG) estimator, a dynamic extension (DCCE-MG) that accommodates lagged dependent variables and lags of cross-sectional averages, and a Principal Component CCE Mean Group (PC-CCE-MG) estimator that replaces raw cross-sectional averages with PCA-derived factor proxies for improved robustness when the rank condition is borderline. Companion procedures include the Pesaran-Yamagata (2008) slope homogeneity test, the Pesaran (2007) CIPS panel unit root test, the De Vos-Everaert-Sarafidis (2024) CCE rank condition test, a half-panel jackknife bias correction following Dhaene and Jochmans (2015), wild bootstrap standard errors, and publication-ready LaTeX table export. All core estimators are validated against R's `plm` package to six decimal places on Penn World Tables data. The library fills a gap in GAUSS's econometric toolkit for applied researchers working with macro panels, international datasets, and any cross-sectional setting where unobserved common factors generate residual correlation across units.
 
 ---
 
@@ -68,7 +68,7 @@ Several companion methods inform and supplement the core estimators.
 
 ### 3.1 Architecture and Dependencies
 
-dccelib is written entirely in the GAUSS matrix programming language (Aptech Systems, 2023) and requires GAUSS version 23 or later. The library has no external dependencies beyond the base GAUSS installation. It is distributed through the GAUSS Application Center and is also available on GitHub. The library is organized as a collection of GAUSS procedure (`.src`) files that are loaded into the user's workspace via the standard `#include` or `library` mechanism.
+dccelib is written entirely in the GAUSS matrix programming language (Aptech Systems, 2023) and requires GAUSS version 26 or later. The library has no external dependencies beyond the base GAUSS installation. It is distributed through the GAUSS Application Center and is also available on GitHub. The library is organized as a collection of GAUSS procedure (`.src`) files that are loaded into the user's workspace via the standard `#include` or `library` mechanism.
 
 ### 3.2 API Design
 
@@ -80,44 +80,57 @@ struct mgControl ctrl;
 ctrl = mgControlCreate();
 
 // Set options
-ctrl.y_lags  = 1;       // Number of lags of dependent variable
-ctrl.cr_lags = 1;       // Number of lags of cross-sectional averages
-ctrl.pooled  = 1;       // Also estimate pooled CCE
-ctrl.i1      = 0;       // I(1) extension (KPY 2011)
-ctrl.two_way = 0;       // Two-way factor structure
+ctrl.y_lags      = 1;           // Number of lags of dependent variable
+ctrl.cr_lags     = 1;           // Number of lags of cross-sectional averages
+ctrl.pooled      = 1;           // Also estimate pooled CCE
+ctrl.i1          = 0;           // I(1) extension (KPY 2011)
+ctrl.two_way     = 0;           // Two-way factor structure
+ctrl.x_csa_names = "log_hc";   // Extra CSA variable by column name
 
-// Estimate
+// Estimate via formula string (v1.2.0+)
 struct mgOut out;
-out = dcce_mg(y, x, ctrl);
+out = dcce_mg(data, "log_rgdpo ~ log_ck + log_ngd", ctrl);
+
+// Equivalent: formula in the control struct
+ctrl.formula = "log_rgdpo ~ log_ck + log_ngd";
+out = dcce_mg(data, ctrl);
 ```
+
+Version 1.2.0 introduced a formula-string API that eliminates the need to manually pre-select and reorder data columns. Users may pass a Wilkinson-style formula as a second positional argument or set `ctrl.formula`; the library resolves variable names against the dataframe and reorders columns automatically. Extra CSA variables can now be specified by column name via `ctrl.x_csa_names`, and non-standard panel/time column positions are handled via `ctrl.groupvar` and `ctrl.timevar`.
 
 This design offers several advantages over positional argument lists or string-option parsing (as used in Stata's `xtmg`). Control structures are self-documenting, making analysis scripts readable and reproducible. New options can be added to `mgControl` in future versions without altering the signatures of existing calls, preserving backward compatibility. The struct-based output (`mgOut`) similarly contains named fields for coefficients, standard errors, t-statistics, p-values, R-squared values, and diagnostic statistics, avoiding the positional indexing required when procedures return undifferentiated matrices.
 
 ### 3.3 Core Procedures
 
-**`mg(y, x, ctrl)`** estimates the Pesaran-Smith (1995) Mean Group estimator. Returns unit-level slope estimates, the panel-average coefficient vector with standard errors, and the Pesaran (2004) CD statistic on the residuals.
+**`mg(data [, formula, ctrl])`** estimates the Pesaran-Smith (1995) Mean Group estimator. Returns unit-level slope estimates, the panel-average coefficient vector with standard errors, and the Pesaran (2004) CD statistic on the residuals.
 
-**`cce_mg(y, x, ctrl)`** estimates the Pesaran (2006) CCE Mean Group estimator. Internally constructs cross-sectional averages of $y$ and $x$ (and any extra variables passed via `ctrl.x_csa`) and augments each unit's regression. If `ctrl.pooled = 1`, pooled CCE is estimated in the same call and the output struct contains both sets of results.
+**`cce_mg(data [, formula, ctrl])`** estimates the Pesaran (2006) CCE Mean Group estimator. Internally constructs cross-sectional averages of $y$ and $x$ (and any extra variables passed via `ctrl.x_csa` or `ctrl.x_csa_names`) and augments each unit's regression. If `ctrl.pooled = 1`, pooled CCE is estimated in the same call and the output struct contains both sets of results.
 
-**`dcce_mg(y, x, ctrl)`** estimates the dynamic CCE-MG estimator. Adds `ctrl.y_lags` lags of $y$ and `ctrl.cr_lags` lags of the cross-sectional averages to the unit regression. Supports the `i1` and `two_way` extensions via the corresponding control flags.
+**`dcce_mg(data [, formula, ctrl])`** estimates the dynamic CCE-MG estimator. Adds `ctrl.y_lags` lags of $y$ and `ctrl.cr_lags` lags of the cross-sectional averages to the unit regression. Supports the `i1` and `two_way` extensions via the corresponding control flags.
 
-**`pcceNW(y, x, ctrl)`** estimates pooled CCE with Newey-West heteroskedasticity and autocorrelation consistent (HAC) standard errors, appropriate when the researcher wishes to impose slope homogeneity with robust inference.
+**`pcce_mg(data [, formula, ctrl, num_pc])`** estimates the Principal Component CCE Mean Group estimator. Computes PCA on the CSA matrix (via SVD) and replaces the raw averages with their leading principal components before augmenting unit regressions. The number of PCs is selected automatically via the Ahn-Horenstein (2013) eigenvalue ratio criterion when `num_pc = 0` (default). Requires no external library.
+
+**`pcceNW(...)`** estimates pooled CCE with Newey-West heteroskedasticity and autocorrelation consistent (HAC) standard errors, appropriate when the researcher wishes to impose slope homogeneity with robust inference.
 
 ### 3.4 Diagnostic Procedures
 
-**`cips(y, p)`** computes the Pesaran (2007) CIPS panel unit root statistic for series `y` with `p` augmentation lags. Returns the CIPS statistic and reports whether it exceeds Pesaran's (2007) tabulated critical values at the 1%, 5%, and 10% levels.
+**`cips(data [, formula, p, demean, report])`** computes the Pesaran (2007) CIPS panel unit root statistic. Accepts a full dataframe with an optional formula string to select the series of interest. Returns the CIPS statistic and per-group CADF t-ratios; prints a formatted results table by default.
 
-**`slopehomo(y, x)`** computes the Pesaran-Yamagata (2008) $\hat{\Delta}$ and $\hat{\Delta}_{adj}$ slope homogeneity statistics with associated p-values under the standard normal asymptotic distribution.
+**`cce_rank(data [, ctrl])`** tests the CCE rank condition following De Vos, Everaert and Sarafidis (2024). Returns singular values and condition number of the CSA matrix; the `pass` field indicates whether the rank condition is satisfied.
+
+**`slopehomo(mgO [, report])`** computes the Pesaran-Yamagata (2008) $\hat{\Delta}$ and $\hat{\Delta}_{adj}$ slope homogeneity statistics with associated p-values under the standard normal asymptotic distribution. Takes an `mgOut` struct as input (the output of any core estimator).
 
 ### 3.5 Post-Estimation and Output Procedures
 
-**`hpj(y, x, ctrl)`** applies the Dhaene-Jochmans (2015) half-panel jackknife bias correction. It splits the sample at $\lfloor T/2 \rfloor$, calls the appropriate core estimator on each half-panel and the full panel, and returns the bias-corrected coefficient vector.
+**`hpj(data, ctrl [, estimator_type])`** applies the Dhaene-Jochmans (2015) half-panel jackknife bias correction. It splits the sample at $\lfloor T/2 \rfloor$, calls the appropriate core estimator on each half-panel and the full panel, and returns the bias-corrected coefficient vector in an `mgOut` struct.
 
-**`mgBootstrap(y, x, ctrl, nreps)`** computes wild Rademacher bootstrap standard errors by re-estimating the model on `nreps` bootstrap samples constructed by multiplying residuals by i.i.d. Rademacher draws. This provides inference that is robust to non-normality and heteroskedasticity when asymptotic approximations may be unreliable.
+**`mgBootstrap(data, ctrl [, B, estimator_type])`** computes wild Rademacher bootstrap standard errors by re-estimating the model on `B` (default 999) bootstrap samples constructed by multiplying residuals by i.i.d. Rademacher draws. This provides inference that is robust to non-normality and heteroskedasticity when asymptotic approximations may be unreliable. The one-call wrapper `mgBootstrapSE()` returns an `mgOut` with bootstrap SEs substituted for NP SEs.
 
-**`mgOutToLatex(out, varnames)`** exports a single model's results to a formatted LaTeX `tabular` environment. **`mgOutToLatexMulti(out_list, varnames)`** places multiple models (e.g., MG, CCE-MG, DCCE-MG) side by side in a single table, facilitating the coefficient comparison displays common in empirical macro papers.
+**`mgOutToLatex(mgO, filename [, se_type, note])`** exports a single model's results to a formatted LaTeX `tabular` environment. **`mgOutToLatexMulti(mgO_arr, labels, filename [, note])`** places 2–6 models (e.g., MG, CCE-MG, DCCE-MG) side by side in a single table, facilitating the coefficient comparison displays common in empirical macro papers.
 
-**`coeftable(out)`** returns a numeric matrix containing coefficients, standard errors, t-statistics, and p-values, suitable for downstream matrix operations such as constructing joint hypothesis tests or plotting coefficient distributions.
+**`printCoefCompare(varnames, coef_mat, labels)`** prints an aligned side-by-side coefficient comparison table to the console. Accepts a k×1 string array of variable names, a k×m matrix of estimates from m models, and an m×1 string array of column labels. Useful for interactive model comparison without producing a full LaTeX table.
+
+**`coeftable(mgO)`** returns a k×4 numeric matrix containing coefficients, standard errors, t-statistics, and p-values, suitable for downstream matrix operations such as constructing joint hypothesis tests or plotting coefficient distributions.
 
 ### 3.6 Validation Methodology
 
@@ -155,7 +168,7 @@ The progression from MG to CCE-MG to DCCE-MG illustrates precisely the inferenti
 
 ### 4.4 Output and Reproducibility
 
-The full replication script — loading Penn World Tables data, running all three estimators, applying CIPS and slope homogeneity tests, and exporting a multi-column LaTeX table via `mgOutToLatexMulti()` — is included in the dccelib distribution as `examples/pwt_replication.gss`. Users can verify the numerical results against the R benchmark using the companion `examples/pwt_plm_benchmark.R` script.
+The library ships with nine example scripts in the `examples/` directory covering the full workflow: `mg_penn.e` (MG estimator with three equivalent variable-specification methods), `cce_penn.e` (CCE-MG), `dcce_penn.e` (DCCE-MG), `cce_proc.e` (combined MG/CCE-MG/DCCE-MG), `diagnostics.e` (CIPS + slope homogeneity), `advanced_cce.e` (pooled CCE, I(1), two-way CCE), `bias_correction.e` (HPJ + wild bootstrap), `export_tables.e` (LaTeX single and multi-model export), and `pca_cce.e` (PC-CCE-MG with automatic and fixed PC selection). Users can verify the numerical results against R using `validation/validate_dcce.R`, which benchmarks all three core estimators via `plm::pmg()`.
 
 ---
 
@@ -177,11 +190,11 @@ MATLAB users have access to some factor-model estimation tools (e.g., through th
 
 ## 6. Conclusion
 
-We have presented dccelib, a GAUSS library for panel data estimation with cross-sectional dependence. The library implements the MG, CCE-MG, and DCCE-MG estimators of Pesaran (2006) and extensions, together with a complete suite of diagnostic and post-estimation tools. All core estimators are numerically validated against an independent R implementation, and the library is distributed with a fully reproducible empirical illustration based on Penn World Tables data.
+We have presented dccelib, a GAUSS library for panel data estimation with cross-sectional dependence. Version 1.2.0 implements the MG, CCE-MG, DCCE-MG, and PC-CCE-MG estimators of Pesaran (2006) and extensions, together with a complete suite of diagnostic and post-estimation tools. A formula-string API introduced in v1.2.0 eliminates manual column selection and reordering, making estimation scripts more concise and readable. All core estimators are numerically validated against an independent R implementation, and the library ships with nine fully reproducible example scripts based on Penn World Tables data.
 
-dccelib is available through the GAUSS Application Center and the Aptech Systems GitHub organization. It is released under an open-source license to facilitate use, inspection, and extension by the research community. Bug reports and feature requests may be submitted through the GitHub issue tracker.
+dccelib is available through the GAUSS Application Center and the Aptech Systems GitHub organization. It is released for non-commercial public use. Bug reports and feature requests may be submitted through the GitHub issue tracker.
 
-Future development priorities include: (i) automatic lag selection for `y_lags` and `cr_lags` based on information criteria computed over the individual-unit regressions; (ii) a spatial CCE variant that replaces simple cross-sectional averages with spatially weighted averages for applications with explicit network or geographic structure; (iii) factor-augmented panel VAR estimation; and (iv) extended compatibility testing with new GAUSS releases.
+Future development priorities include: (i) a spatial CCE variant that replaces simple cross-sectional averages with spatially weighted averages for applications with explicit network or geographic structure; (ii) factor-augmented panel VAR estimation; and (iii) extended compatibility testing with new GAUSS releases.
 
 We hope dccelib lowers the barrier to rigorous cross-sectionally robust inference for the substantial community of applied econometricians who conduct their work in GAUSS, and contributes to raising the standard of panel data practice in empirical macroeconomics and related fields.
 
