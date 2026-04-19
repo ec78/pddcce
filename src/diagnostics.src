@@ -20,6 +20,7 @@
 */
 proc (0) = plotResiduals(struct mgOut mgO);
     local e, n, e_std, e_sorted, p, q_norm, idx, ref_x, ref_y;
+    local sig_sorted, sig_rank;
     struct plotControl plt;
 
     e   = mgO.e_mg;
@@ -67,13 +68,15 @@ proc (0) = plotResiduals(struct mgOut mgO);
     ref_y = q_norm[1] | q_norm[n];
     plotAddXY(ref_x, ref_y);
 
-    // ---- Panel 4: Per-group residual SD ----
+    // ---- Panel 4: Per-group residual SD (sorted, ranked) ----
+    sig_sorted = sortc(mgO.sig_vec, 1);
+    sig_rank   = seqa(1, 1, mgO.ngroups);
     plotLayout(2, 2, 4);
-    plt = plotGetDefaults("bar");
-    plotSetTitle(&plt, "Per-Group Residual SD");
-    plotSetXLabel(&plt, "Group");
+    plt = plotGetDefaults("xy");
+    plotSetTitle(&plt, "Per-Group Residual SD (sorted)");
+    plotSetXLabel(&plt, "Group rank");
     plotSetYLabel(&plt, "Residual SD");
-    plotBar(plt, seqa(1, 1, mgO.ngroups)', mgO.sig_vec');
+    plotXY(plt, sig_rank, sig_sorted);
 
     plotClearLayout();
 
