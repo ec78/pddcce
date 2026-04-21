@@ -2,7 +2,7 @@
 
 **Dynamic Common-Correlated Effects Estimators for GAUSS**
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue)](package.json)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue)](package.json)
 [![License](https://img.shields.io/badge/license-GAUSS%20Standard-lightgrey)](https://www.aptech.com)
 [![Validated](https://img.shields.io/badge/validated-plm%20%286dp%29-brightgreen)](#validation)
 
@@ -30,6 +30,10 @@ The library is based on the Common Correlated Effects (CCE) framework of Pesaran
   - [HPJ Bias Correction](#hpj-bias-correction)
   - [Wild Bootstrap SE](#wild-bootstrap-se)
   - [LaTeX Export](#latex-export)
+- [Visualization](#visualization)
+  - [plotResiduals](#plotresiduals)
+  - [plotCoefficients](#plotcoefficients)
+  - [plotResidualACF](#plotresidualacf)
 - [Advanced Options](#advanced-options)
 - [Output Structure](#output-structure)
 - [Examples](#examples)
@@ -332,6 +336,43 @@ ct = coeftable(cceO);
 
 ---
 
+## Visualization
+
+Three plot functions provide post-estimation diagnostics. All accept an `mgOut` struct returned by any estimator.
+
+### plotResiduals
+
+Produces a 4-panel residual diagnostic figure:
+
+- **Residuals over observations** — checks for outliers and variance drift
+- **Histogram** — checks distributional shape; normality and symmetry improve after CCE
+- **Normal Q-Q plot** — heavy-tailed S-curves indicate common factor contamination in plain MG residuals
+- **Per-group residual SD (sorted)** — ranked line from smallest to largest SD; reveals whether misfit is concentrated in a few atypical economies or spread evenly
+
+```gauss
+plotResiduals(mgO);    // plain MG: look for heavy tails and skewness
+plotResiduals(cceO);   // CCE-MG: compare — distribution should tighten
+```
+
+### plotCoefficients
+
+Caterpillar plot of per-group slope estimates, sorted ascending, with 95% confidence intervals and a horizontal line at the MG mean. One panel per regressor (up to 6 in a grid). Use this to visualise slope heterogeneity and motivate the MG estimator over pooled alternatives.
+
+```gauss
+plotCoefficients(cceO);
+```
+
+### plotResidualACF
+
+Bar chart of the sample autocorrelation function of the pooled residuals, from lag 0 to `maxlag` (default 20), with ±1.96/√N significance bands. Significant lag-1 autocorrelation after CCE-MG motivates the dynamic extension (`dcce_mg`).
+
+```gauss
+plotResidualACF(cceO);          // default: up to lag 20
+plotResidualACF(cceO, 30);      // extend to lag 30
+```
+
+---
+
 ## Advanced Options
 
 ### Pooled CCE in One Call
@@ -433,8 +474,10 @@ After installation, example scripts are in the **`examples/`** folder of the pac
 | [advanced_cce.e](examples/advanced_cce.e) | Pooled CCE, I(1) extension, two-way CCE |
 | [bias_correction.e](examples/bias_correction.e) | HPJ bias correction + wild bootstrap SE |
 | [export_tables.e](examples/export_tables.e) | LaTeX single and multi-model table export |
+| [pca_cce.e](examples/pca_cce.e) | PC-CCE-MG with automatic and fixed principal component selection |
+| [full_workflow.e](examples/full_workflow.e) | Complete recommended workflow: MG → CIPS → CCE-MG → slope homogeneity → DCCE-MG → HPJ → LaTeX |
 
-All examples use `penn_sample.dta` (Penn World Tables, N=93 countries, T≈50 years).
+All examples use `penn_world.dta` (Penn World Tables, N=93 countries, T≈50 years).
 
 ---
 

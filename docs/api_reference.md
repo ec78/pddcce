@@ -853,7 +853,7 @@ proc (0) = print_longRun(lrO);
 proc (0) = plotResiduals(mgO);
 ```
 
-Panels: residuals over observation index; histogram; normal Q-Q plot; per-group residual SD bar chart.
+Panels: residuals over observation index; histogram; normal Q-Q plot; per-group residual SD sorted ascending as a line plot (x = group rank, y = SD) — reveals whether misfit is concentrated in a few atypical units or spread evenly across the panel.
 
 ---
 
