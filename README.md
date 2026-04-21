@@ -39,6 +39,7 @@ The library is based on the Common Correlated Effects (CCE) framework of Pesaran
 - [Examples](#examples)
 - [Validation](#validation)
 - [References](#references)
+- [Citing dccelib](#citing-dccelib)
 
 ---
 
@@ -527,6 +528,30 @@ tgauss.exe -b -nj validation/validate_gauss.e
 
 - Pesaran, M.H. (2007). A simple panel unit root test in the presence of cross-section dependence. *Journal of Applied Econometrics*, 22(2), 265–312.
 - Pesaran, M.H. and Yamagata, T. (2008). Testing slope homogeneity in large panels. *Journal of Econometrics*, 142(1), 50–93.
+
+---
+
+## Citing dccelib
+
+If you use dccelib in published research, please cite it as:
+
+> Clower, E. (2026). *dccelib: A GAUSS Library for Panel Data Estimation with Cross-Sectional Dependence* (Version 1.2.0). Aptech Systems, Inc. https://github.com/ec78/pddcce
+
+BibTeX:
+
+```bibtex
+@software{clower2026dccelib,
+  author    = {Clower, Eric},
+  title     = {{dccelib}: A {GAUSS} Library for Panel Data Estimation
+               with Cross-Sectional Dependence},
+  year      = {2026},
+  version   = {1.2.0},
+  publisher = {Aptech Systems, Inc.},
+  url       = {https://github.com/ec78/pddcce}
+}
+```
+
+Please also cite the underlying methodology as appropriate for your application. Key references are listed in the [References](#references) section below.
 
 ---
 

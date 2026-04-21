@@ -4,6 +4,8 @@
 
 This document provides a complete reference for all public procedures in dccelib. Internal procedures (prefixed with `__`) are not documented here.
 
+If you use dccelib in published research, please cite it as: Clower, E. (2026). *dccelib: A GAUSS Library for Panel Data Estimation with Cross-Sectional Dependence* (Version 1.2.0). Aptech Systems, Inc. https://github.com/ec78/pddcce — and cite the relevant methodological references listed at the end of this document.
+
 ---
 
 ## Table of Contents
