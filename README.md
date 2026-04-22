@@ -21,6 +21,7 @@ The library is based on the Common Correlated Effects (CCE) framework of Pesaran
   - [Mean Group (MG)](#mean-group-mg)
   - [CCE Mean Group (CCE-MG)](#cce-mean-group-cce-mg)
   - [Dynamic CCE-MG (DCCE-MG)](#dynamic-cce-mg-dcce-mg)
+  - [PC-CCE Mean Group (PC-CCE-MG)](#pc-cce-mean-group-pc-cce-mg)
 - [mgControl Options](#mgcontrol-options)
 - [Diagnostic Tests](#diagnostic-tests)
   - [CD Test](#pesaran-2004-cd-test)
@@ -162,6 +163,23 @@ dcceO = dcce_mg(reg_data, ctl);
 ```
 
 `cr_lags = 0` activates automatic lag selection via the Andrews (1991) rule: `PT = floor(T^(1/3))`.
+
+### PC-CCE Mean Group (PC-CCE-MG)
+
+When the cross-sectional averages (CSAs) are near-collinear — common when many variables are included or when common factors are few relative to observables — the standard CCE augmentation matrix can be rank-deficient, making CCE inconsistent. The PC-CCE-MG estimator replaces the raw CSA matrix with its leading principal components (extracted via SVD), restoring full rank while retaining the factor-spanning property of the original CSAs.
+
+The number of principal components can be selected automatically using the Ahn and Horenstein (2013) eigenvalue ratio criterion, or fixed manually.
+
+```gauss
+// Automatic PC selection (Ahn-Horenstein 2013)
+struct mgOut pcceO;
+pcceO = pcce_mg(data, "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)");
+
+// Fixed at 2 principal components
+pcceO2 = pcce_mg(data, "log_rgdpo ~ log_ck + log_ngd + csa(log_hc)", 2);
+```
+
+`pcce_mg` returns the same `mgOut` struct as the other estimators. The `.model` field records the number of components selected: `"CCE Mean Group [PC-CCE, m=1]"`. Use `cce_rank()` beforehand to check whether rank deficiency is present and whether PC-CCE is warranted.
 
 ---
 
@@ -484,7 +502,7 @@ All examples use `penn_world.dta` (Penn World Tables, N=93 countries, T≈50 yea
 
 ## Validation
 
-All three core estimators are validated against R's `plm::pmg()` to **six decimal places** on Penn World Tables data.
+The three primary estimators (MG, CCE-MG, DCCE-MG) are validated against R's `plm::pmg()` to **six decimal places** on Penn World Tables data. PC-CCE-MG has no direct R equivalent and is validated by confirming convergence to CCE-MG as the number of principal components approaches the full CSA rank.
 
 | Estimator | Variable | GAUSS | R (plm) |
 |-----------|----------|-------|---------|
@@ -520,8 +538,10 @@ tgauss.exe -b -nj validation/validate_gauss.e
 
 **Extensions:**
 
+- Chudik, A. and Pesaran, M.H. (2015). Common correlated effects estimation of heterogeneous dynamic panel data models with weakly exogenous regressors. *Journal of Econometrics*, 188(2), 393–420.
 - Kapetanios, G., Pesaran, M.H. and Yamagata, T. (2011). Panels with non-stationary multifactor error structures. *Journal of Econometrics*, 160(2), 326–348.
 - Bai, J. (2009). Panel data models with interactive fixed effects. *Econometrica*, 77(4), 1229–1279.
+- Ahn, S.C. and Horenstein, A.R. (2013). Eigenvalue ratio test for the number of factors. *Econometrica*, 81(3), 1203–1227.
 - Dhaene, G. and Jochmans, K. (2015). Split-panel jackknife estimation of fixed-effect models. *Review of Economic Studies*, 82(3), 991–1030.
 
 **Companion tests:**
